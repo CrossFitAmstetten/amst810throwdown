@@ -703,7 +703,7 @@ function renderAdminScores(){
   document.getElementById("a-score-w1").innerHTML=state.teams.map(function(t){
     var sc=state.scores[t.id]||{},mv=sc.w1time||sc.w1reps||"";
     return"<div class='s-row-tc'><div class='s-name'>"+t.name+"</div>"+
-      "<input class='s-input' type='text' inputmode='decimal' placeholder='mm:ss oder Reps' value='"+mv+"' id='w1m-"+t.id+"' oninput='APP.updStat("w1s-"+t.id+"",this.value,""+s.wo1cap+"")'/>"+
+      "<input class='s-input score-main-input' type='text' inputmode='decimal' placeholder='mm:ss oder Reps' value='"+mv+"' id='w1m-"+t.id+"' data-statid='w1s-"+t.id+"' data-cap='"+s.wo1cap+"'/>"+
       "<input class='s-input' type='text' inputmode='decimal' placeholder='mm:ss' value='"+(sc.w1tb||"")+"' id='w1tb-"+t.id+"'/>"+
       "<div id='w1s-"+t.id+"' style='text-align:center'>"+statusBadge(mv,s.wo1cap)+"</div></div>";
   }).join("");
@@ -715,10 +715,23 @@ function renderAdminScores(){
   document.getElementById("a-score-w3").innerHTML=state.teams.map(function(t){
     var sc=state.scores[t.id]||{},mv=sc.w3time||sc.w3reps||"";
     return"<div class='s-row-tc'><div class='s-name'>"+t.name+"</div>"+
-      "<input class='s-input' type='text' inputmode='decimal' placeholder='mm:ss oder Reps' value='"+mv+"' id='w3m-"+t.id+"' oninput='APP.updStat("w3s-"+t.id+"",this.value,""+s.wo3cap+"")'/>"+
+      "<input class='s-input score-main-input' type='text' inputmode='decimal' placeholder='mm:ss oder Reps' value='"+mv+"' id='w3m-"+t.id+"' data-statid='w3s-"+t.id+"' data-cap='"+s.wo3cap+"'/>"+
       "<input class='s-input' type='text' inputmode='decimal' placeholder='mm:ss' value='"+(sc.w3tb||"")+"' id='w3tb-"+t.id+"'/>"+
       "<div id='w3s-"+t.id+"' style='text-align:center'>"+statusBadge(mv,s.wo3cap)+"</div></div>";
   }).join("");
+  // Wire up live status badges via event delegation
+  ["a-score-w1","a-score-w3"].forEach(function(gridId){
+    var grid=document.getElementById(gridId);
+    if(!grid)return;
+    grid.addEventListener("input",function(e){
+      var inp=e.target;
+      if(inp.classList.contains("score-main-input")){
+        var statId=inp.getAttribute("data-statid");
+        var cap=inp.getAttribute("data-cap");
+        updStat(statId,inp.value,cap);
+      }
+    });
+  });
 }
 async function saveScores(){
   var s=state.settings;
