@@ -311,6 +311,9 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
     <div class="a-section" id="a-heats">
       <div class="a-card">
         <div class="a-card-title">Heat-Einstellungen</div>
+        <div style="background:var(--gray2);border-radius:6px;padding:8px 12px;font-size:.75rem;color:var(--gray5);font-family:DM Mono,monospace;margin-bottom:12px">
+          ℹ️ Die Heat-Dauer entspricht automatisch der Timecap des jeweiligen Workouts.
+        </div>
         <div class="a-grid3">
           <div class="a-field"><label>Startzeit Heat 1</label><input id="heat-starttime" placeholder="09:00" value="09:00"/></div>
           <div class="a-field"><label>Pause zwischen Heats (min)</label><input id="heat-pause" type="number" min="1" max="60" placeholder="5" value="5"/></div>
@@ -625,24 +628,37 @@ function renderRankingInto(containerId,view){
 function getTeamById(id){return state.teams.find(function(t){return t.id===id||t.id===Number(id);})||null;}
 function getTeamName(id){var t=getTeamById(id);return t?t.name:"?";}
 
+function getWoTimecapMins(wo){
+  var s=state.settings;
+  var caps=[s.wo1cap||"12:00", s.wo2cap||s.wo1cap||"12:00", s.wo3cap||s.wo1cap||"12:00"];
+  // wo2 has no timecap concept - use a fixed duration from settings or 12min
+  var wo2dur=parseInt(s.wo2duration||s.wo1cap||12);
+  var capStr=wo===1?(String(wo2dur)+":00"):caps[wo];
+  var p=capStr.split(":");
+  return parseInt(p[0]||0)+parseFloat(p[1]||0)/60;
+}
+
 function calcHeatTimes(){
   var h=state.heats||{};
   if(!h.heats||!h.heats.length)return[[],[],[]];
   var startParts=(h.startTime||"09:00").split(":");
   var startMins=parseInt(startParts[0])*60+parseInt(startParts[1]);
-  var heatDur=parseInt(h.heatDuration||12);
   var pause=parseInt(h.pauseBetweenHeats||5);
   var woBreak=parseInt(h.breakBetweenWorkouts||20);
-  var nWorkouts=3;
-  // times[wo][heatIdx] = {start, end} in minutes from midnight
+  var s=state.settings;
+  // Use each workout's timecap as heat duration
+  function capToMins(cap){var p=(cap||"12:00").split(":");return parseInt(p[0]||0)+parseFloat((p[1]||0))/60;}
+  var woDurs=[capToMins(s.wo1cap), capToMins(s.wo2cap||s.wo1cap), capToMins(s.wo3cap)];
   var times=[];
-  for(var wo=0;wo<nWorkouts;wo++){
+  var cursor=startMins;
+  for(var wo=0;wo<3;wo++){
     var wt=[];
-    var woStart=startMins+wo*(h.heats.length*(heatDur+pause)-pause+woBreak);
+    var dur=woDurs[wo];
     for(var hi=0;hi<h.heats.length;hi++){
-      var hs=woStart+hi*(heatDur+pause);
-      wt.push({start:hs,end:hs+heatDur});
+      wt.push({start:cursor,end:cursor+dur});
+      cursor+=dur+pause;
     }
+    cursor=cursor-pause+woBreak; // remove last pause, add workout break
     times.push(wt);
   }
   return times;
@@ -715,7 +731,28 @@ function updateHeatVisBadge(){
   else{badge.className="vis-badge off";badge.textContent="Nicht sichtbar";}
 }
 
-function makeSelect(teams, selectedId, dataset){
+// Build flat athlete list from all teams: [{name, teamId, teamName}]
+function getAllAthletes(){
+  var athletes=[];
+  state.teams.forEach(function(t){
+    if(!t.ath||t.ath.trim()===""){
+      athletes.push({name:t.name,teamId:t.id,teamName:t.name});
+    } else {
+      t.ath.split(",").forEach(function(a){
+        var n=a.trim();
+        if(n)athletes.push({name:n,teamId:t.id,teamName:t.name});
+      });
+    }
+  });
+  return athletes;
+}
+
+// Get athletes NOT in the given team
+function getAvailableJudges(excludeTeamId){
+  return getAllAthletes().filter(function(a){return a.teamId!==excludeTeamId;});
+}
+
+function makeTeamSelect(teams, selectedId, dataset){
   var sel=document.createElement("select");
   sel.className="heat-edit-select";
   sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
@@ -729,15 +766,46 @@ function makeSelect(teams, selectedId, dataset){
   });
   sel.addEventListener("change",function(){
     var hi=parseInt(sel.dataset.hi);
-    var role=sel.dataset.role;
-    var heat=state.heats.heats[hi];
-    if(role==="team"){
-      heat.teams[parseInt(sel.dataset.ti)]=parseInt(sel.value);
-    } else {
-      var tid=sel.dataset.tid;
-      heat.judges[tid]=parseInt(sel.value);
-      heat.judges[parseInt(tid)]=parseInt(sel.value);
-    }
+    var ti=parseInt(sel.dataset.ti);
+    state.heats.heats[hi].teams[ti]=parseInt(sel.value);
+  });
+  return sel;
+}
+
+function makeJudgeSelect(excludeTeamId, selectedJudge, dataset){
+  var sel=document.createElement("select");
+  sel.className="heat-edit-select";
+  sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
+  Object.keys(dataset).forEach(function(k){sel.dataset[k]=dataset[k];});
+  var available=getAllAthletes();
+  // group by team with optgroups
+  var byTeam={};
+  available.forEach(function(a){
+    if(!byTeam[a.teamId])byTeam[a.teamId]=[];
+    byTeam[a.teamId].push(a);
+  });
+  // blank option
+  var blank=document.createElement("option");
+  blank.value="";blank.textContent="– Judge wählen –";
+  if(!selectedJudge)blank.selected=true;
+  sel.appendChild(blank);
+  Object.keys(byTeam).forEach(function(tid){
+    var grp=document.createElement("optgroup");
+    grp.label=getTeamName(parseInt(tid));
+    byTeam[tid].forEach(function(a){
+      var opt=document.createElement("option");
+      opt.value=a.name;
+      opt.textContent=a.name;
+      if(a.name===selectedJudge)opt.selected=true;
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  });
+  sel.addEventListener("change",function(){
+    var hi=parseInt(sel.dataset.hi);
+    var tid=sel.dataset.tid;
+    state.heats.heats[hi].judges[tid]=sel.value;
+    state.heats.heats[hi].judges[parseInt(tid)]=sel.value;
   });
   return sel;
 }
@@ -787,8 +855,8 @@ function renderAdminHeatsList(){
         var jid=heat.judges[tid]||heat.judges[String(tid)]||state.teams[0].id;
         var row=document.createElement("div");
         row.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;align-items:center";
-        var teamSel=makeSelect(state.teams,tid,{wo:wo,hi:hi,ti:ti,role:"team"});
-        var judgeSel=makeSelect(state.teams,jid,{wo:wo,hi:hi,tid:tid,role:"judge"});
+        var teamSel=makeTeamSelect(state.teams,tid,{hi:hi,ti:ti});
+        var judgeSel=makeJudgeSelect(tid,jid,{hi:hi,tid:String(tid)});
         row.appendChild(teamSel);
         row.appendChild(judgeSel);
         block.appendChild(row);
@@ -804,7 +872,17 @@ function autoAssignJudges(){
     var heat=heats[hi];
     var prevHeat=hi>0?heats[hi-1].teams:[];
     var excluded=new Set(heat.teams.concat(prevHeat));
-    var available=state.teams.filter(function(t){return!excluded.has(t.id);}).map(function(t){return t.id;});
+    // Get athletes from non-excluded teams
+    var available=[];
+    state.teams.forEach(function(t){
+      if(!excluded.has(t.id)){
+        if(t.ath&&t.ath.trim()!==""){
+          t.ath.split(",").forEach(function(a){var n=a.trim();if(n)available.push(n);});
+        } else {
+          available.push(t.name);
+        }
+      }
+    });
     var used=[];
     heat.judges={};
     for(var ti=0;ti<heat.teams.length;ti++){
@@ -813,6 +891,7 @@ function autoAssignJudges(){
       var judge=choices[ti%choices.length];
       used.push(judge);
       heat.judges[heat.teams[ti]]=judge;
+      heat.judges[String(heat.teams[ti])]=judge;
     }
   }
 }
