@@ -135,6 +135,26 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
 .sync-ok{background:rgba(200,255,107,.1);color:var(--finish)}
 .sync-err{background:rgba(255,107,53,.1);color:var(--accent2)}
 .sync-loading{background:var(--gray2);color:var(--gray5)}
+/* ── HEATS ── */
+.heat-card{background:var(--gray1);border:1px solid var(--gray2);border-radius:10px;margin-bottom:1rem;overflow:hidden}
+.heat-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--gray2);background:var(--gray2)}
+.heat-title{font-family:"Bebas Neue",sans-serif;font-size:1.4rem;color:var(--accent);letter-spacing:.06em}
+.heat-time{font-family:"DM Mono",monospace;font-size:.8rem;color:var(--gray5)}
+.heat-body{padding:1rem 1.25rem}
+.heat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray2)}
+.heat-row:last-child{border-bottom:none}
+.heat-team{font-weight:600;font-size:.9rem}
+.heat-judge{font-size:.78rem;color:var(--gray5);font-family:"DM Mono",monospace}
+.heat-judge-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--gray4);display:block;margin-bottom:2px}
+.heat-dot{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.58rem;font-weight:700;flex-shrink:0;vertical-align:middle;margin-right:6px}
+.break-card{background:var(--gray2);border:1px solid var(--gray3);border-radius:8px;padding:.75rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--gray5);font-family:"DM Mono",monospace}
+.break-icon{font-size:1.1rem}
+.wo-break-card{background:rgba(232,255,71,.06);border:1px solid rgba(232,255,71,.15);border-radius:8px;padding:.75rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--accent);font-family:"DM Mono",monospace}
+.admin-heat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--gray2)}
+.admin-heat-row:last-child{border-bottom:none}
+.admin-heat-row select{width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:"DM Sans",sans-serif;outline:none}
+.admin-heat-row select:focus{border-color:var(--accent)}
+
 @media(max-width:600px){
   .pub-header{padding:0 1rem;height:52px}.admin-header{padding:0 1rem;height:50px}
   .pub-hero{padding:1rem}.pub-hero img{max-width:260px}
@@ -177,6 +197,7 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
   <nav class="pub-nav">
     <button class="pub-nav-btn active" data-page="ranking">🏆 Rangliste</button>
     <button class="pub-nav-btn" data-page="workouts">Workouts</button>
+    <button class="pub-nav-btn" data-page="heats">Heats</button>
   </nav>
   <div class="pub-page active" id="page-ranking">
     <div class="pub-hero">
@@ -195,6 +216,9 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
   </div>
   <div class="pub-page" id="page-workouts">
     <div class="wo-wrap" id="pub-workouts-container"><div class="loading-state">⏳ Lade Workouts...</div></div>
+  </div>
+  <div class="pub-page" id="page-heats">
+    <div class="wo-wrap" id="pub-heats-container"><div class="loading-state">⏳ Lade Heats...</div></div>
   </div>
 </div>
 
@@ -227,6 +251,7 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
       <button class="a-tab active" data-tab="teams">Teams</button>
       <button class="a-tab" data-tab="scores">Scores</button>
       <button class="a-tab" data-tab="ranking">Rangliste</button>
+      <button class="a-tab" data-tab="heats">Heats</button>
       <button class="a-tab" data-tab="settings">Einstellungen</button>
     </div>
 
@@ -281,6 +306,30 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
         <button class="rank-filter-btn" data-aview="wo3" id="a-filter-wo3-btn">Workout 3</button>
       </div>
       <div id="a-ranking-container"></div>
+    </div>
+
+    <div class="a-section" id="a-heats">
+      <div class="a-card">
+        <div class="a-card-title">Heat-Einstellungen</div>
+        <div class="a-grid3">
+          <div class="a-field"><label>Startzeit Heat 1</label><input id="heat-starttime" placeholder="09:00" value="09:00"/></div>
+          <div class="a-field"><label>Pause zwischen Heats (min)</label><input id="heat-pause" type="number" min="1" max="60" placeholder="5" value="5"/></div>
+          <div class="a-field"><label>Umbau zwischen Workouts (min)</label><input id="heat-wobreak" type="number" min="1" max="60" placeholder="20" value="20"/></div>
+        </div>
+        <div class="toggle-wrap" style="margin-top:.5rem">
+          <label class="toggle"><input type="checkbox" id="heats-visible"/><span class="toggle-slider"></span></label>
+          <span class="toggle-label">Heats für Teilnehmer sichtbar</span>
+          <span class="vis-badge off" id="heats-vis-badge" style="margin-left:8px">Nicht sichtbar</span>
+        </div>
+        <div class="flex-end">
+          <button class="btn-ghost" id="btn-regen-heats">🔄 Heats neu einteilen</button>
+          <button class="btn-primary" id="btn-save-heats">💾 Heats speichern</button>
+        </div>
+      </div>
+      <div class="a-card" id="a-heats-editor">
+        <div class="a-card-title">Heats &amp; Judge-Zuteilung</div>
+        <div id="a-heats-list"></div>
+      </div>
     </div>
 
     <div class="a-section" id="a-settings">
@@ -349,6 +398,7 @@ var COLORS=[
 /* ══ STATE ══ */
 var state={
   teams:[],scores:{},
+  heats:{"teamsPerHeat": 3, "startTime": "09:00", "heatDuration": 12, "pauseBetweenHeats": 5, "breakBetweenWorkouts": 20, "visible": false, "heats": [{"id": 1, "teams": [1000000, 1000001, 1000002], "judges": {"1000000": 1000003, "1000001": 1000005, "1000002": 1000007}}, {"id": 2, "teams": [1000003, 1000004, 1000005], "judges": {"1000003": 1000006, "1000004": 1000008, "1000005": 1000010}}, {"id": 3, "teams": [1000006, 1000007, 1000008], "judges": {"1000006": 1000000, "1000007": 1000002, "1000008": 1000010}}, {"id": 4, "teams": [1000009, 1000010, 1000011], "judges": {"1000009": 1000000, "1000010": 1000002, "1000011": 1000004}}, {"id": 5, "teams": [1000012, 1000013], "judges": {"1000012": 1000000, "1000013": 1000002}}]},
   settings:{
     wo1:"Workout 1",wo1cap:"12:00",
     wo2:"Workout 2",wo2type:"reps",
@@ -391,6 +441,7 @@ async function loadFromDB(){
       var sd=await sr.json();
       if(sd&&sd.length>0&&sd[0].data){
         var sdata=sd[0].data;
+        if(sdata.heats&&sdata.heats.heats){state.heats=sdata.heats;delete sdata.heats;}
         Object.assign(state.settings,sdata);
       }
     }
@@ -460,7 +511,8 @@ async function saveScoresDB(){
 async function saveSettingsDB(){
   setSyncStatus("sync");
   try{
-    await sbFetch("settings","POST",[{id:1,data:state.settings}]);
+    var dataToSave=Object.assign({},state.settings,{heats:state.heats});
+    await sbFetch("settings","POST",[{id:1,data:dataToSave}]);
     setSyncStatus("ok");
   }catch(e){setSyncStatus("err");console.error(e);}
 }
@@ -569,6 +621,238 @@ function renderRankingInto(containerId,view){
   if(rt)rt.textContent="Zuletzt aktualisiert: "+new Date().toLocaleTimeString("de-AT");
 }
 
+/* ══ HEAT HELPERS ══ */
+function getTeamById(id){return state.teams.find(function(t){return t.id===id||t.id===Number(id);})||null;}
+function getTeamName(id){var t=getTeamById(id);return t?t.name:"?";}
+
+function calcHeatTimes(){
+  var h=state.heats||{};
+  if(!h.heats||!h.heats.length)return[[],[],[]];
+  var startParts=(h.startTime||"09:00").split(":");
+  var startMins=parseInt(startParts[0])*60+parseInt(startParts[1]);
+  var heatDur=parseInt(h.heatDuration||12);
+  var pause=parseInt(h.pauseBetweenHeats||5);
+  var woBreak=parseInt(h.breakBetweenWorkouts||20);
+  var nWorkouts=3;
+  // times[wo][heatIdx] = {start, end} in minutes from midnight
+  var times=[];
+  for(var wo=0;wo<nWorkouts;wo++){
+    var wt=[];
+    var woStart=startMins+wo*(h.heats.length*(heatDur+pause)-pause+woBreak);
+    for(var hi=0;hi<h.heats.length;hi++){
+      var hs=woStart+hi*(heatDur+pause);
+      wt.push({start:hs,end:hs+heatDur});
+    }
+    times.push(wt);
+  }
+  return times;
+}
+
+function minsToTime(m){
+  var h=Math.floor(m/60)%24,mm=m%60;
+  return(h<10?"0":"")+h+":"+(mm<10?"0":"")+mm;
+}
+
+/* ══ HEATS PUBLIC ══ */
+function renderPublicHeats(){
+  var el=document.getElementById("pub-heats-container");if(!el)return;
+  var h=state.heats;
+  if(!h.visible){
+    el.innerHTML="<div class='wo-locked' style='padding:3rem'><span class='wo-locked-icon'>🔒</span><span class='wo-locked-text'>Heats noch nicht veröffentlicht</span></div>";
+    return;
+  }
+  var times=calcHeatTimes();
+  var s=state.settings;
+  var woNames=[s.wo1,s.wo2,s.wo3];
+  var html="";
+  for(var wo=0;wo<3;wo++){
+    html+="<div style='font-family:Bebas Neue,sans-serif;font-size:1.6rem;letter-spacing:.06em;color:var(--accent);margin:1.5rem 0 .75rem'>"+woNames[wo]+"</div>";
+    for(var hi=0;hi<h.heats.length;hi++){
+      var heat=h.heats[hi];
+      var ht=times[wo][hi];
+      html+="<div class='heat-card'>";
+      html+="<div class='heat-header'><span class='heat-title'>Heat "+heat.id+"</span><span class='heat-time'>"+minsToTime(ht.start)+" – "+minsToTime(ht.end)+"</span></div>";
+      html+="<div class='heat-body'>";
+      html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:.65rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:6px;border-bottom:1px solid var(--gray2);margin-bottom:4px'><div>Team</div><div>Judge (Team)</div></div>";
+      for(var ti=0;ti<heat.teams.length;ti++){
+        var tid=heat.teams[ti];
+        var jid=heat.judges[tid]||heat.judges[String(tid)];
+        var col=COLORS[state.teams.findIndex(function(t){return t.id===tid;})%COLORS.length]||COLORS[0];
+        html+="<div class='heat-row'>";
+        html+="<div><span class='heat-dot' style='background:"+col.bg+";color:"+col.c+"'>"+getTeamName(tid).slice(0,2).toUpperCase()+"</span><span class='heat-team'>"+getTeamName(tid)+"</span></div>";
+        html+="<div><span class='heat-judge-label'>Judge</span><span class='heat-judge'>"+getTeamName(jid)+"</span></div>";
+        html+="</div>";
+      }
+      html+="</div></div>";
+      if(hi<h.heats.length-1){
+        html+="<div class='break-card'><span class='break-icon'>☕</span>Pause: "+minsToTime(times[wo][hi].end)+" – "+minsToTime(times[wo][hi+1].start)+" ("+h.pauseBetweenHeats+" min)</div>";
+      }
+    }
+    if(wo<2){
+      var lastEnd=times[wo][h.heats.length-1].end;
+      var nextStart=times[wo+1][0].start;
+      html+="<div class='wo-break-card'><span>⚙️</span>Umbau: "+minsToTime(lastEnd)+" – "+minsToTime(nextStart)+" ("+h.breakBetweenWorkouts+" min)</div>";
+    }
+  }
+  el.innerHTML=html;
+}
+
+/* ══ HEATS ADMIN ══ */
+function renderAdminHeats(){
+  var h=state.heats||{};
+  document.getElementById("heat-starttime").value=h.startTime||"09:00";
+  document.getElementById("heat-pause").value=h.pauseBetweenHeats||5;
+  document.getElementById("heat-wobreak").value=h.breakBetweenWorkouts||20;
+  var vcb=document.getElementById("heats-visible");
+  if(vcb)vcb.checked=!!h.visible;
+  updateHeatVisBadge();
+  renderAdminHeatsList();
+}
+
+function updateHeatVisBadge(){
+  var cb=document.getElementById("heats-visible"),badge=document.getElementById("heats-vis-badge");if(!cb||!badge)return;
+  if(cb.checked){badge.className="vis-badge on";badge.textContent="Sichtbar";}
+  else{badge.className="vis-badge off";badge.textContent="Nicht sichtbar";}
+}
+
+function makeSelect(teams, selectedId, dataset){
+  var sel=document.createElement("select");
+  sel.className="heat-edit-select";
+  sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
+  Object.keys(dataset).forEach(function(k){sel.dataset[k]=dataset[k];});
+  teams.forEach(function(t){
+    var opt=document.createElement("option");
+    opt.value=t.id;
+    opt.textContent=t.name;
+    if(t.id===selectedId||String(t.id)===String(selectedId))opt.selected=true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener("change",function(){
+    var hi=parseInt(sel.dataset.hi);
+    var role=sel.dataset.role;
+    var heat=state.heats.heats[hi];
+    if(role==="team"){
+      heat.teams[parseInt(sel.dataset.ti)]=parseInt(sel.value);
+    } else {
+      var tid=sel.dataset.tid;
+      heat.judges[tid]=parseInt(sel.value);
+      heat.judges[parseInt(tid)]=parseInt(sel.value);
+    }
+  });
+  return sel;
+}
+
+function renderAdminHeatsList(){
+  var h=state.heats;
+  if(!h||!h.heats||!h.heats.length){
+    // auto-generate heats if missing
+    regenHeatsQuiet();
+    h=state.heats;
+  }
+  var el=document.getElementById("a-heats-list");if(!el)return;
+  el.innerHTML="";
+  var times=calcHeatTimes();
+  var s=state.settings,woNames=[s.wo1,s.wo2,s.wo3];
+
+  for(var wo=0;wo<3;wo++){
+    // Workout label
+    var woLabel=document.createElement("div");
+    woLabel.style.cssText="font-family:Bebas Neue,sans-serif;font-size:1.2rem;letter-spacing:.06em;color:var(--accent);margin:1rem 0 .5rem";
+    woLabel.textContent=woNames[wo];
+    el.appendChild(woLabel);
+
+    for(var hi=0;hi<h.heats.length;hi++){
+      var heat=h.heats[hi],ht=times[wo][hi];
+
+      // Heat block
+      var block=document.createElement("div");
+      block.style.cssText="background:var(--gray2);border:1px solid var(--gray3);border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem";
+
+      // Heat header row
+      var hdr=document.createElement("div");
+      hdr.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem";
+      hdr.innerHTML="<span style='font-family:Bebas Neue,sans-serif;font-size:1.1rem;color:var(--accent)'>Heat "+heat.id+"</span>"
+        +"<span style='font-family:DM Mono,monospace;font-size:.72rem;color:var(--gray5)'>"+minsToTime(ht.start)+" – "+minsToTime(ht.end)+"</span>";
+      block.appendChild(hdr);
+
+      // Column headers
+      var colHdr=document.createElement("div");
+      colHdr.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.62rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid var(--gray3)";
+      colHdr.innerHTML="<div>Team</div><div>Judge</div>";
+      block.appendChild(colHdr);
+
+      // Team rows
+      for(var ti=0;ti<heat.teams.length;ti++){
+        var tid=heat.teams[ti];
+        var jid=heat.judges[tid]||heat.judges[String(tid)]||state.teams[0].id;
+        var row=document.createElement("div");
+        row.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;align-items:center";
+        var teamSel=makeSelect(state.teams,tid,{wo:wo,hi:hi,ti:ti,role:"team"});
+        var judgeSel=makeSelect(state.teams,jid,{wo:wo,hi:hi,tid:tid,role:"judge"});
+        row.appendChild(teamSel);
+        row.appendChild(judgeSel);
+        block.appendChild(row);
+      }
+      el.appendChild(block);
+    }
+  }
+}
+
+function autoAssignJudges(){
+  var heats=state.heats.heats;
+  for(var hi=0;hi<heats.length;hi++){
+    var heat=heats[hi];
+    var prevHeat=hi>0?heats[hi-1].teams:[];
+    var excluded=new Set(heat.teams.concat(prevHeat));
+    var available=state.teams.filter(function(t){return!excluded.has(t.id);}).map(function(t){return t.id;});
+    var used=[];
+    heat.judges={};
+    for(var ti=0;ti<heat.teams.length;ti++){
+      var choices=available.filter(function(a){return used.indexOf(a)===-1;});
+      if(!choices.length)choices=available;
+      var judge=choices[ti%choices.length];
+      used.push(judge);
+      heat.judges[heat.teams[ti]]=judge;
+    }
+  }
+}
+
+function regenHeatsQuiet(){
+  var n=state.teams.length,perHeat=parseInt(state.heats.teamsPerHeat)||3;
+  var newHeats=[];
+  for(var i=0;i<Math.ceil(n/perHeat);i++){
+    var tids=state.teams.slice(i*perHeat,(i+1)*perHeat).map(function(t){return t.id;});
+    newHeats.push({id:i+1,teams:tids,judges:{}});
+  }
+  state.heats.heats=newHeats;
+  autoAssignJudges();
+}
+
+function regenHeats(){
+  if(!confirm("Heats neu einteilen? Bestehende Zuteilung wird überschrieben."))return;
+  var n=state.teams.length,perHeat=parseInt(state.heats.teamsPerHeat)||3;
+  var newHeats=[];
+  for(var i=0;i<Math.ceil(n/perHeat);i++){
+    var tids=state.teams.slice(i*perHeat,(i+1)*perHeat).map(function(t){return t.id;});
+    newHeats.push({id:i+1,teams:tids,judges:{}});
+  }
+  state.heats.heats=newHeats;
+  autoAssignJudges();
+  renderAdminHeatsList();
+}
+
+async function saveHeats(){
+  state.heats.startTime=document.getElementById("heat-starttime").value||"09:00";
+  state.heats.pauseBetweenHeats=parseInt(document.getElementById("heat-pause").value)||5;
+  state.heats.breakBetweenWorkouts=parseInt(document.getElementById("heat-wobreak").value)||20;
+  var vcb=document.getElementById("heats-visible");
+  if(vcb)state.heats.visible=vcb.checked;
+  await saveSettingsDB();
+  var btn=document.getElementById("btn-save-heats");
+  btn.textContent="✓ Gespeichert";setTimeout(function(){btn.innerHTML="💾 Heats speichern";},1800);
+  renderPublicHeats();
+}
+
 /* ══ WORKOUTS PUBLIC ══ */
 function renderPublicWorkouts(){
   var s=state.settings,el=document.getElementById("pub-workouts-container");if(!el)return;
@@ -607,6 +891,7 @@ function renderPublic(){
   if(b1)b1.textContent=s.wo1;if(b2)b2.textContent=s.wo2;if(b3)b3.textContent=s.wo3;
   renderRankingInto("pub-ranking",currentRankView);
   renderPublicWorkouts();
+  renderPublicHeats();
 }
 
 /* ══ AUTH ══ */
@@ -629,6 +914,7 @@ function switchTab(name){
   if(name==="teams")renderAdminTeams();
   if(name==="scores")renderAdminScores();
   if(name==="settings")loadSettingsUI();
+  if(name==="heats")renderAdminHeats();
   if(name==="ranking"){
     var s=state.settings;
     var ab1=document.getElementById("a-filter-wo1-btn"),ab2=document.getElementById("a-filter-wo2-btn"),ab3=document.getElementById("a-filter-wo3-btn");
@@ -818,6 +1104,9 @@ document.getElementById("inp-team-name").addEventListener("keydown",function(e){
 document.getElementById("inp-team-ath").addEventListener("keydown",function(e){if(e.key==="Enter")addTeam();});
 document.getElementById("btn-save-scores").addEventListener("click",saveScores);
 document.getElementById("btn-save-settings").addEventListener("click",saveSettings);
+document.getElementById("btn-save-heats").addEventListener("click",saveHeats);
+document.getElementById("btn-regen-heats").addEventListener("click",regenHeats);
+document.getElementById("heats-visible").addEventListener("change",updateHeatVisBadge);
 document.getElementById("btn-reset-all").addEventListener("click",resetAll);
 document.getElementById("admin-tabs").addEventListener("click",function(e){var btn=e.target.closest(".a-tab");if(btn)switchTab(btn.getAttribute("data-tab"));});
 document.getElementById("rank-filter").addEventListener("click",function(e){
@@ -838,6 +1127,7 @@ document.querySelectorAll(".pub-nav-btn").forEach(function(btn){
     var page=document.getElementById("page-"+btn.getAttribute("data-page"));
     if(page)page.classList.add("active");
     if(btn.getAttribute("data-page")==="workouts")renderPublicWorkouts();
+    if(btn.getAttribute("data-page")==="heats")renderPublicHeats();
   });
 });
 for(var _n=1;_n<=3;_n++){
