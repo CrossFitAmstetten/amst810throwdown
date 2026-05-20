@@ -394,6 +394,20 @@ var SB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZi
 var EDGE_URL="https://wsgkhqwdocbfyfkyoorn.supabase.co/functions/v1/competition-api";
 var _wt="amst810throwdown";
 
+/* ══ RATE LIMITER ══ */
+var _loginAttempts=0, _lockUntil=0;
+
+/* ══ SESSION TIMEOUT (30 min) ══ */
+var _sessionTimer=null, SESSION_MS=30*60*1000;
+function resetSessionTimer(){
+  if(_sessionTimer)clearTimeout(_sessionTimer);
+  _sessionTimer=setTimeout(function(){
+    if(isAdmin){doLogout();alert("Session abgelaufen. Bitte erneut einloggen.");}
+  },SESSION_MS);
+}
+document.addEventListener("click",function(){if(isAdmin)resetSessionTimer();});
+document.addEventListener("keydown",function(){if(isAdmin)resetSessionTimer();});
+
 
 /* ══ API FUNCTIONS ══ */
 function sbRead(path){
