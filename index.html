@@ -314,10 +314,14 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
         <div style="background:var(--gray2);border-radius:6px;padding:8px 12px;font-size:.75rem;color:var(--gray5);font-family:DM Mono,monospace;margin-bottom:12px">
           ℹ️ Die Heat-Dauer entspricht automatisch der Timecap des jeweiligen Workouts.
         </div>
-        <div class="a-grid3">
+        <div class="a-grid2">
           <div class="a-field"><label>Startzeit Heat 1</label><input id="heat-starttime" placeholder="09:00" value="09:00"/></div>
-          <div class="a-field"><label>Pause zwischen Heats (min)</label><input id="heat-pause" type="number" min="1" max="60" placeholder="5" value="5"/></div>
           <div class="a-field"><label>Umbau zwischen Workouts (min)</label><input id="heat-wobreak" type="number" min="1" max="60" placeholder="20" value="20"/></div>
+        </div>
+        <div class="a-grid3">
+          <div class="a-field"><label>Pause WO1 zwischen Heats (min)</label><input id="heat-pause-wo1" type="number" min="1" max="60" placeholder="5" value="5"/></div>
+          <div class="a-field"><label>Pause WO2 zwischen Heats (min)</label><input id="heat-pause-wo2" type="number" min="1" max="60" placeholder="5" value="5"/></div>
+          <div class="a-field"><label>Pause WO3 zwischen Heats (min)</label><input id="heat-pause-wo3" type="number" min="1" max="60" placeholder="5" value="5"/></div>
         </div>
         <div class="toggle-wrap" style="margin-top:.5rem">
           <label class="toggle"><input type="checkbox" id="heats-visible"/><span class="toggle-slider"></span></label>
@@ -643,10 +647,13 @@ function calcHeatTimes(){
   if(!h.heats||!h.heats.length)return[[],[],[]];
   var startParts=(h.startTime||"09:00").split(":");
   var startMins=parseInt(startParts[0])*60+parseInt(startParts[1]);
-  var pause=parseInt(h.pauseBetweenHeats||5);
+  var pauses=[
+    parseInt(h.pauseWo1||h.pauseBetweenHeats||5),
+    parseInt(h.pauseWo2||h.pauseBetweenHeats||5),
+    parseInt(h.pauseWo3||h.pauseBetweenHeats||5)
+  ];
   var woBreak=parseInt(h.breakBetweenWorkouts||20);
   var s=state.settings;
-  // Use each workout's timecap as heat duration
   function capToMins(cap){var p=(cap||"12:00").split(":");return parseInt(p[0]||0)+parseFloat((p[1]||0))/60;}
   var woDurs=[capToMins(s.wo1cap), capToMins(s.wo2cap||s.wo1cap), capToMins(s.wo3cap)];
   var times=[];
@@ -654,11 +661,12 @@ function calcHeatTimes(){
   for(var wo=0;wo<3;wo++){
     var wt=[];
     var dur=woDurs[wo];
+    var pause=pauses[wo];
     for(var hi=0;hi<h.heats.length;hi++){
       wt.push({start:cursor,end:cursor+dur});
       cursor+=dur+pause;
     }
-    cursor=cursor-pause+woBreak; // remove last pause, add workout break
+    cursor=cursor-pause+woBreak;
     times.push(wt);
   }
   return times;
@@ -701,7 +709,8 @@ function renderPublicHeats(){
       }
       html+="</div></div>";
       if(hi<h.heats.length-1){
-        html+="<div class='break-card'><span class='break-icon'>☕</span>Pause: "+minsToTime(times[wo][hi].end)+" – "+minsToTime(times[wo][hi+1].start)+" ("+h.pauseBetweenHeats+" min)</div>";
+        var woPause=[h.pauseWo1||h.pauseBetweenHeats||5,h.pauseWo2||h.pauseBetweenHeats||5,h.pauseWo3||h.pauseBetweenHeats||5];
+        html+="<div class='break-card'><span class='break-icon'>☕</span>Pause: "+minsToTime(times[wo][hi].end)+" – "+minsToTime(times[wo][hi+1].start)+" ("+woPause[wo]+" min)</div>";
       }
     }
     if(wo<2){
@@ -717,7 +726,9 @@ function renderPublicHeats(){
 function renderAdminHeats(){
   var h=state.heats||{};
   document.getElementById("heat-starttime").value=h.startTime||"09:00";
-  document.getElementById("heat-pause").value=h.pauseBetweenHeats||5;
+  document.getElementById("heat-pause-wo1").value=h.pauseWo1||h.pauseBetweenHeats||5;
+  document.getElementById("heat-pause-wo2").value=h.pauseWo2||h.pauseBetweenHeats||5;
+  document.getElementById("heat-pause-wo3").value=h.pauseWo3||h.pauseBetweenHeats||5;
   document.getElementById("heat-wobreak").value=h.breakBetweenWorkouts||20;
   var vcb=document.getElementById("heats-visible");
   if(vcb)vcb.checked=!!h.visible;
@@ -922,7 +933,10 @@ function regenHeats(){
 
 async function saveHeats(){
   state.heats.startTime=document.getElementById("heat-starttime").value||"09:00";
-  state.heats.pauseBetweenHeats=parseInt(document.getElementById("heat-pause").value)||5;
+  state.heats.pauseWo1=parseInt(document.getElementById("heat-pause-wo1").value)||5;
+  state.heats.pauseWo2=parseInt(document.getElementById("heat-pause-wo2").value)||5;
+  state.heats.pauseWo3=parseInt(document.getElementById("heat-pause-wo3").value)||5;
+  state.heats.pauseBetweenHeats=state.heats.pauseWo1; // fallback
   state.heats.breakBetweenWorkouts=parseInt(document.getElementById("heat-wobreak").value)||20;
   var vcb=document.getElementById("heats-visible");
   if(vcb)state.heats.visible=vcb.checked;
