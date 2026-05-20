@@ -533,18 +533,20 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("");
 }
 var DEFAULT_PW_HASH="240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"; // admin123
+
 function getAdminPwHash(){
+  // Check Supabase settings first, then localStorage, then default
+  var fromSettings=state.settings&&state.settings.adminPwHash;
+  if(fromSettings&&/^[0-9a-f]{64}$/.test(fromSettings))return fromSettings;
   var stored=localStorage.getItem(ADMIN_PW_KEY);
-  if(!stored)return DEFAULT_PW_HASH;
-  // If stored value looks like a SHA-256 hash (64 hex chars), use it directly
-  if(/^[0-9a-f]{64}$/.test(stored))return stored;
-  // Otherwise it's a legacy plaintext password - migrate it
-  // We can't hash it synchronously here, so just clear it and use default
-  // The user will need to re-login with admin123
-  localStorage.removeItem(ADMIN_PW_KEY);
+  if(stored&&/^[0-9a-f]{64}$/.test(stored))return stored;
   return DEFAULT_PW_HASH;
 }
-function setAdminPwHash(hash){localStorage.setItem(ADMIN_PW_KEY,hash);}
+function setAdminPwHash(hash){
+  // Save in both localStorage AND Supabase settings for reliability
+  localStorage.setItem(ADMIN_PW_KEY,hash);
+  state.settings.adminPwHash=hash;
+}
 
 /* ══ INPUT SANITIZATION ══ */
 function sanitize(str){
@@ -1214,6 +1216,8 @@ async function saveSettings(){
     if(np.length<6){msg.style.color="var(--accent2)";msg.textContent="Mindestens 6 Zeichen.";return;}
     var newHash=await sha256(np);
     setAdminPwHash(newHash);
+    // Save to Supabase immediately
+    await saveSettingsDB();
     msg.style.color="var(--finish)";msg.textContent="Passwort geändert.";
     document.getElementById("s-pw-new").value="";document.getElementById("s-pw-rep").value="";
   } else{msg.textContent="";}
