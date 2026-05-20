@@ -394,7 +394,7 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
 /* ══ SUPABASE CONFIG ══ */
 var SB_URL="https://wsgkhqwdocbfyfkyoorn.supabase.co";
 var SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzZ2tocXdkb2NiZnlma3lvb3JuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzkwNjIsImV4cCI6MjA5NDUxNTA2Mn0.qj0wjKFcnqNXE9oCpNPvU4lX8tiTISYdw7lePFRQ8tk";
-var ADMIN_PW_KEY="amst810_pw";
+
 
 /* ══ COLORS ══ */
 var COLORS=[
@@ -532,20 +532,17 @@ async function sha256(str){
   var buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("");
 }
-var DEFAULT_PW_HASH="240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"; // admin123
+// SHA-256 of "admin123"
+var DEFAULT_PW_HASH="240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
 
 function getAdminPwHash(){
-  // Check Supabase settings first, then localStorage, then default
-  var fromSettings=state.settings&&state.settings.adminPwHash;
-  if(fromSettings&&/^[0-9a-f]{64}$/.test(fromSettings))return fromSettings;
-  var stored=localStorage.getItem(ADMIN_PW_KEY);
-  if(stored&&/^[0-9a-f]{64}$/.test(stored))return stored;
+  var h=state.settings.adminPwHash;
+  if(h&&h.length===64)return h;
   return DEFAULT_PW_HASH;
 }
-function setAdminPwHash(hash){
-  // Save in both localStorage AND Supabase settings for reliability
-  localStorage.setItem(ADMIN_PW_KEY,hash);
+async function setAdminPwHash(hash){
   state.settings.adminPwHash=hash;
+  await saveSettingsDB();
 }
 
 /* ══ INPUT SANITIZATION ══ */
@@ -1029,25 +1026,31 @@ async function doLogin(){
     document.getElementById("login-error").textContent="Zu viele Versuche. Bitte "+secs+"s warten.";
     return;
   }
-  var pw=document.getElementById("login-pw").value;
+  var pw=document.getElementById("login-pw").value.trim();
   if(!pw){document.getElementById("login-error").textContent="Bitte Passwort eingeben.";return;}
-  var hash=await sha256(pw);
-  if(hash===getAdminPwHash()){
-    _loginAttempts=0;
-    isAdmin=true;closeLogin();
-    document.getElementById("public-view").style.display="none";
-    document.getElementById("admin-view").style.display="block";
-    loadSettingsUI();switchTab("teams");
-    resetSessionTimer();
-  } else {
-    _loginAttempts++;
-    if(_loginAttempts>=5){
-      _lockUntil=Date.now()+30000;
+  try{
+    var hash=await sha256(pw);
+    var expected=getAdminPwHash();
+    if(hash===expected){
       _loginAttempts=0;
-      document.getElementById("login-error").textContent="Zu viele Versuche. 30s gesperrt.";
+      isAdmin=true;closeLogin();
+      document.getElementById("public-view").style.display="none";
+      document.getElementById("admin-view").style.display="block";
+      loadSettingsUI();switchTab("teams");
+      resetSessionTimer();
     } else {
-      document.getElementById("login-error").textContent="Falsches Passwort. ("+_loginAttempts+"/5)";
+      _loginAttempts++;
+      if(_loginAttempts>=5){
+        _lockUntil=Date.now()+30000;
+        _loginAttempts=0;
+        document.getElementById("login-error").textContent="Zu viele Versuche. 30s gesperrt.";
+      } else {
+        document.getElementById("login-error").textContent="Falsches Passwort. ("+_loginAttempts+"/5)";
+      }
     }
+  }catch(e){
+    document.getElementById("login-error").textContent="Fehler beim Login. Bitte nochmal versuchen.";
+    console.error("Login error:",e);
   }
 }
 function doLogout(){
@@ -1215,9 +1218,7 @@ async function saveSettings(){
     if(np!==rp){msg.style.color="var(--accent2)";msg.textContent="Passwörter stimmen nicht überein.";return;}
     if(np.length<6){msg.style.color="var(--accent2)";msg.textContent="Mindestens 6 Zeichen.";return;}
     var newHash=await sha256(np);
-    setAdminPwHash(newHash);
-    // Save to Supabase immediately
-    await saveSettingsDB();
+    await setAdminPwHash(newHash);
     msg.style.color="var(--finish)";msg.textContent="Passwort geändert.";
     document.getElementById("s-pw-new").value="";document.getElementById("s-pw-rep").value="";
   } else{msg.textContent="";}
