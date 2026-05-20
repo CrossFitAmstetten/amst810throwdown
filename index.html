@@ -530,7 +530,17 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("");
 }
 var DEFAULT_PW_HASH="240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"; // admin123
-function getAdminPwHash(){return localStorage.getItem(ADMIN_PW_KEY)||DEFAULT_PW_HASH;}
+function getAdminPwHash(){
+  var stored=localStorage.getItem(ADMIN_PW_KEY);
+  if(!stored)return DEFAULT_PW_HASH;
+  // If stored value looks like a SHA-256 hash (64 hex chars), use it directly
+  if(/^[0-9a-f]{64}$/.test(stored))return stored;
+  // Otherwise it's a legacy plaintext password - migrate it
+  // We can't hash it synchronously here, so just clear it and use default
+  // The user will need to re-login with admin123
+  localStorage.removeItem(ADMIN_PW_KEY);
+  return DEFAULT_PW_HASH;
+}
 function setAdminPwHash(hash){localStorage.setItem(ADMIN_PW_KEY,hash);}
 
 /* ══ HELPERS ══ */
