@@ -390,8 +390,24 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
 <script>
 /* ══ SUPABASE CONFIG ══ */
 var SB_URL="https://wsgkhqwdocbfyfkyoorn.supabase.co";
-var SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzZ2tocXdkb2NiZnlma3lvb3JuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzkwNjIsImV4cCI6MjA5NDUxNTA2Mn0.qj0wjKFcnqNXE9oCpNPvU4lX8tiTISYdw7lePFRQ8tk";
+var SB_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzZ2tocXdkb2NiZnlma3lvb3JuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzkwNjIsImV4cCI6MjA5NDUxNTA2Mn0.qj0wjKFcnqNXE9oCpNPvU4lX8tiTISYdw7lePFRQ8tk";
+var EDGE_URL="https://wsgkhqwdocbfyfkyoorn.supabase.co/functions/v1/competition-api";
+var _wt="amst810throwdown";
 
+
+/* ══ API FUNCTIONS ══ */
+function sbRead(path){
+  return fetch(SB_URL+"/rest/v1/"+path,{
+    headers:{"apikey":SB_ANON,"Authorization":"Bearer "+SB_ANON,"Content-Type":"application/json"}
+  });
+}
+function sbWrite(table,method,body,filter){
+  var url=EDGE_URL+"?table="+table+(filter?"&filter="+encodeURIComponent(filter):"");
+  return fetch(url,{method:method||"POST",
+    headers:{"Content-Type":"application/json","x-write-token":_wt,"Authorization":"Bearer "+SB_ANON},
+    body:body?JSON.stringify(body):undefined
+  });
+}
 
 /* ══ COLORS ══ */
 var COLORS=[
@@ -418,19 +434,7 @@ var state={
 var isAdmin=false;
 var currentRankView="total";
 
-/* ══ SUPABASE API ══ */
-function sbFetch(path,method,body){
-  return fetch(SB_URL+"/rest/v1/"+path,{
-    method:method||"GET",
-    headers:{
-      "apikey":SB_KEY,
-      "Authorization":"Bearer "+SB_KEY,
-      "Content-Type":"application/json",
-      "Prefer": method==="POST"?"resolution=merge-duplicates,return=minimal":"return=minimal"
-    },
-    body:body?JSON.stringify(body):undefined
-  });
-}
+
 
 function setSyncStatus(s){
   var el=document.getElementById("sync-status");if(!el)return;
@@ -443,7 +447,7 @@ function setSyncStatus(s){
 async function loadFromDB(){
   try{
     // Load settings
-    var sr=await sbFetch("settings?select=*&id=eq.1");
+    var sr=await sbRead("settings?select=*&id=eq.1");
     if(sr.ok){
       var sd=await sr.json();
       if(sd&&sd.length>0&&sd[0].data){
@@ -453,7 +457,7 @@ async function loadFromDB(){
       }
     }
     // Load teams
-    var tr=await sbFetch("teams?select=*&order=id.asc");
+    var tr=await sbRead("teams?select=*&order=id.asc");
     if(tr.ok){
       var td=await tr.json();
       if(td&&td.length>0){state.teams=td;}
@@ -463,7 +467,7 @@ async function loadFromDB(){
       }
     }
     // Load scores
-    var scr=await sbFetch("scores?select=*");
+    var scr=await sbRead("scores?select=*");
     if(scr.ok){
       var scd=await scr.json();
       state.scores={};
@@ -481,8 +485,8 @@ async function insertDefaultTeams(){
     wo3desc:"",wo3visible:false,wo3descap:"",wo3weightm:"",wo3weightf:""
   };
   try{
-    await sbFetch("teams","POST",defaultTeams);
-    await sbFetch("settings","POST",[{id:1,data:defaultSettings}]);
+    await sbWrite("teams","POST",defaultTeams);
+    await sbWrite("settings","POST",[{id:1,data:defaultSettings}]);
     state.teams=defaultTeams;
     Object.assign(state.settings,defaultSettings);
   }catch(e){console.error("Insert default teams error:",e);}
@@ -492,15 +496,15 @@ async function insertDefaultTeams(){
 async function saveTeam(team){
   setSyncStatus("sync");
   try{
-    await sbFetch("teams","POST",[{id:team.id,name:team.name,ath:team.ath||""}]);
+    await sbWrite("teams","POST",[{id:team.id,name:team.name,ath:team.ath||""}]);
     setSyncStatus("ok");
   }catch(e){setSyncStatus("err");console.error(e);}
 }
 async function deleteTeamDB(id){
   setSyncStatus("sync");
   try{
-    await sbFetch("teams?id=eq."+id,"DELETE");
-    await sbFetch("scores?team_id=eq."+id,"DELETE");
+    await sbWrite("teams","DELETE",null,"id="+id);
+    await sbWrite("scores","DELETE",null,"team_id="+id);
     setSyncStatus("ok");
   }catch(e){setSyncStatus("err");console.error(e);}
 }
@@ -511,7 +515,7 @@ async function saveScoresDB(){
       var sc=state.scores[t.id]||{};
       return{team_id:t.id,w1time:sc.w1time||"",w1reps:sc.w1reps||"",w1tb:sc.w1tb||"",w2:sc.w2||"",w3time:sc.w3time||"",w3reps:sc.w3reps||"",w3tb:sc.w3tb||""};
     });
-    await sbFetch("scores","POST",rows);
+    await sbWrite("scores","POST",rows);
     setSyncStatus("ok");
   }catch(e){setSyncStatus("err");console.error(e);}
 }
@@ -519,7 +523,7 @@ async function saveSettingsDB(){
   setSyncStatus("sync");
   try{
     var dataToSave=Object.assign({},state.settings,{heats:state.heats});
-    await sbFetch("settings","POST",[{id:1,data:dataToSave}]);
+    await sbWrite("settings","POST",[{id:1,data:dataToSave}]);
     setSyncStatus("ok");
   }catch(e){setSyncStatus("err");console.error(e);}
 }
@@ -1239,9 +1243,9 @@ async function saveSettings(){
 async function resetAll(){
   if(!confirm("ALLE Daten löschen?"))return;
   try{
-    await sbFetch("scores","DELETE");
-    await sbFetch("teams","DELETE");
-    await sbFetch("settings?id=eq.1","DELETE");
+    await sbWrite("scores","DELETE");
+    await sbWrite("teams","DELETE");
+    await sbWrite("settings","DELETE",null,"id=1");
     state.teams=[];state.scores={};
     state.settings={wo1:"Workout 1",wo1cap:"12:00",wo2:"Workout 2",wo2type:"reps",wo3:"Workout 3",wo3cap:"12:00",
       wo1desc:"",wo1visible:true,wo1descap:"",wo1weightm:"",wo1weightf:"",
