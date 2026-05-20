@@ -4,6 +4,9 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>AMST810 Throwdown</title>
+<meta http-equiv="X-Content-Type-Options" content="nosniff"/>
+<meta http-equiv="X-Frame-Options" content="SAMEORIGIN"/>
+<meta name="referrer" content="no-referrer"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
@@ -543,6 +546,16 @@ function getAdminPwHash(){
 }
 function setAdminPwHash(hash){localStorage.setItem(ADMIN_PW_KEY,hash);}
 
+/* ══ INPUT SANITIZATION ══ */
+function sanitize(str){
+  if(typeof str!=="string")return"";
+  return str.replace(/[<>"'`]/g,"").substring(0,200);
+}
+function sanitizeScore(str){
+  if(typeof str!=="string")return"";
+  return str.replace(/[^0-9:.,-]/g,"").substring(0,20);
+}
+
 /* ══ HELPERS ══ */
 
 function parseTime(s){
@@ -1008,19 +1021,41 @@ function renderPublic(){
 function openLogin(){document.getElementById("login-pw").value="";document.getElementById("login-error").textContent="";document.getElementById("login-modal").classList.add("open");setTimeout(function(){document.getElementById("login-pw").focus();},100);}
 function closeLogin(){document.getElementById("login-modal").classList.remove("open");}
 async function doLogin(){
+  var now=Date.now();
+  if(now<_lockUntil){
+    var secs=Math.ceil((_lockUntil-now)/1000);
+    document.getElementById("login-error").textContent="Zu viele Versuche. Bitte "+secs+"s warten.";
+    return;
+  }
   var pw=document.getElementById("login-pw").value;
   if(!pw){document.getElementById("login-error").textContent="Bitte Passwort eingeben.";return;}
   var hash=await sha256(pw);
   if(hash===getAdminPwHash()){
+    _loginAttempts=0;
     isAdmin=true;closeLogin();
     document.getElementById("public-view").style.display="none";
     document.getElementById("admin-view").style.display="block";
     loadSettingsUI();switchTab("teams");
+    resetSessionTimer();
   } else {
-    document.getElementById("login-error").textContent="Falsches Passwort.";
+    _loginAttempts++;
+    if(_loginAttempts>=5){
+      _lockUntil=Date.now()+30000;
+      _loginAttempts=0;
+      document.getElementById("login-error").textContent="Zu viele Versuche. 30s gesperrt.";
+    } else {
+      document.getElementById("login-error").textContent="Falsches Passwort. ("+_loginAttempts+"/5)";
+    }
   }
 }
-function doLogout(){isAdmin=false;document.getElementById("admin-view").style.display="none";document.getElementById("public-view").style.display="block";renderPublic();}
+function doLogout(){
+  isAdmin=false;
+  if(_sessionTimer)clearTimeout(_sessionTimer);
+  _sessionTimer=null;
+  document.getElementById("admin-view").style.display="none";
+  document.getElementById("public-view").style.display="block";
+  renderPublic();
+}
 
 /* ══ ADMIN TABS ══ */
 function switchTab(name){
@@ -1043,7 +1078,7 @@ function switchTab(name){
 
 /* ══ TEAMS ══ */
 async function addTeam(){
-  var name=document.getElementById("inp-team-name").value.trim(),ath=document.getElementById("inp-team-ath").value.trim();
+  var name=sanitize(document.getElementById("inp-team-name").value.trim()),ath=sanitize(document.getElementById("inp-team-ath").value.trim());
   if(!name){document.getElementById("inp-team-name").focus();return;}
   if(state.teams.find(function(t){return t.name===name;})){alert("Teamname bereits vergeben!");return;}
   var team={id:Date.now(),name:name,ath:ath};
@@ -1062,8 +1097,8 @@ async function removeTeam(id){
 }
 async function startEdit(id){var el=document.getElementById("tedit-"+id);if(el){el.style.display="block";var ni=document.getElementById("ename-"+id);if(ni)ni.focus();}}
 async function saveEdit(id){
-  var newName=(document.getElementById("ename-"+id)||{value:""}).value.trim();
-  var newAth=(document.getElementById("eath-"+id)||{value:""}).value.trim();
+  var newName=sanitize((document.getElementById("ename-"+id)||{value:""}).value.trim());
+  var newAth=sanitize((document.getElementById("eath-"+id)||{value:""}).value.trim());
   if(!newName){alert("Teamname darf nicht leer sein.");return;}
   if(state.teams.find(function(t){return t.name===newName&&t.id!==id;})){alert("Teamname bereits vergeben!");return;}
   var t=state.teams.find(function(t){return t.id===id;});if(t){t.name=newName;t.ath=newAth;}
@@ -1144,7 +1179,8 @@ async function saveScores(){
     var c1=parseTime(s.wo1cap)||720,t1=parseTime(r1),f1=r1.indexOf(":")!==-1&&t1!==null&&!isNaN(t1)&&t1<=c1;
     var r3=(document.getElementById("w3m-"+t.id)||{value:""}).value,tb3=(document.getElementById("w3tb-"+t.id)||{value:""}).value;
     var c3=parseTime(s.wo3cap)||720,t3=parseTime(r3),f3=r3.indexOf(":")!==-1&&t3!==null&&!isNaN(t3)&&t3<=c3;
-    state.scores[t.id]={team_id:t.id,w1time:f1?r1:"",w1reps:f1?"":r1,w1tb:f1?tb1:"",w2:(document.getElementById("w2-"+t.id)||{value:""}).value,w3time:f3?r3:"",w3reps:f3?"":r3,w3tb:f3?tb3:""};
+    var w2v=sanitizeScore((document.getElementById("w2-"+t.id)||{value:""}).value);
+    state.scores[t.id]={team_id:t.id,w1time:f1?sanitizeScore(r1):"",w1reps:f1?"":sanitizeScore(r1),w1tb:f1?sanitizeScore(tb1):"",w2:w2v,w3time:f3?sanitizeScore(r3):"",w3reps:f3?"":sanitizeScore(r3),w3tb:f3?sanitizeScore(tb3):""};
   });
   await saveScoresDB();
   var btn=document.getElementById("btn-save-scores");btn.textContent="✓ Gespeichert";setTimeout(function(){btn.innerHTML="💾 Scores speichern";},1800);
