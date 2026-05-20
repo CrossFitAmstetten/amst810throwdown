@@ -524,9 +524,16 @@ async function saveSettingsDB(){
   }catch(e){setSyncStatus("err");console.error(e);}
 }
 
+/* ══ PASSWORD HASHING ══ */
+async function sha256(str){
+  var buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("");
+}
+var DEFAULT_PW_HASH="240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"; // admin123
+function getAdminPwHash(){return localStorage.getItem(ADMIN_PW_KEY)||DEFAULT_PW_HASH;}
+function setAdminPwHash(hash){localStorage.setItem(ADMIN_PW_KEY,hash);}
+
 /* ══ HELPERS ══ */
-function getAdminPw(){return localStorage.getItem(ADMIN_PW_KEY)||"admin123";}
-function setAdminPw(pw){localStorage.setItem(ADMIN_PW_KEY,pw);}
 
 function parseTime(s){
   if(!s||s.trim()==="")return null;s=s.trim();
@@ -990,10 +997,18 @@ function renderPublic(){
 /* ══ AUTH ══ */
 function openLogin(){document.getElementById("login-pw").value="";document.getElementById("login-error").textContent="";document.getElementById("login-modal").classList.add("open");setTimeout(function(){document.getElementById("login-pw").focus();},100);}
 function closeLogin(){document.getElementById("login-modal").classList.remove("open");}
-function doLogin(){
+async function doLogin(){
   var pw=document.getElementById("login-pw").value;
-  if(pw===getAdminPw()){isAdmin=true;closeLogin();document.getElementById("public-view").style.display="none";document.getElementById("admin-view").style.display="block";loadSettingsUI();switchTab("teams");}
-  else{document.getElementById("login-error").textContent="Falsches Passwort.";}
+  if(!pw){document.getElementById("login-error").textContent="Bitte Passwort eingeben.";return;}
+  var hash=await sha256(pw);
+  if(hash===getAdminPwHash()){
+    isAdmin=true;closeLogin();
+    document.getElementById("public-view").style.display="none";
+    document.getElementById("admin-view").style.display="block";
+    loadSettingsUI();switchTab("teams");
+  } else {
+    document.getElementById("login-error").textContent="Falsches Passwort.";
+  }
 }
 function doLogout(){isAdmin=false;document.getElementById("admin-view").style.display="none";document.getElementById("public-view").style.display="block";renderPublic();}
 
@@ -1150,8 +1165,10 @@ async function saveSettings(){
   var np=document.getElementById("s-pw-new").value,rp=document.getElementById("s-pw-rep").value,msg=document.getElementById("pw-msg");
   if(np){
     if(np!==rp){msg.style.color="var(--accent2)";msg.textContent="Passwörter stimmen nicht überein.";return;}
-    if(np.length<4){msg.style.color="var(--accent2)";msg.textContent="Mindestens 4 Zeichen.";return;}
-    setAdminPw(np);msg.style.color="var(--finish)";msg.textContent="Passwort geändert.";
+    if(np.length<6){msg.style.color="var(--accent2)";msg.textContent="Mindestens 6 Zeichen.";return;}
+    var newHash=await sha256(np);
+    setAdminPwHash(newHash);
+    msg.style.color="var(--finish)";msg.textContent="Passwort geändert.";
     document.getElementById("s-pw-new").value="";document.getElementById("s-pw-rep").value="";
   } else{msg.textContent="";}
   state.settings.wo1=document.getElementById("s-wo1-name").value||"Workout 1";
