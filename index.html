@@ -912,58 +912,94 @@ function makeJudgeSelect(heatIdx, selectedJudge, dataset, isSecond){
   return sel;
 }
 
+function getJudgeForTeam(heat,wo,tid,slot){
+  // slot: 0=first judge, 1=second judge (only WO2)
+  if(wo===0)return(heat.judgesWo1&&(heat.judgesWo1[tid]||heat.judgesWo1[String(tid)]))||"";
+  if(wo===1){
+    if(slot===0)return(heat.judgesWo2a&&(heat.judgesWo2a[tid]||heat.judgesWo2a[String(tid)]))||"";
+    return(heat.judgesWo2b&&(heat.judgesWo2b[tid]||heat.judgesWo2b[String(tid)]))||"";
+  }
+  return(heat.judgesWo3&&(heat.judgesWo3[tid]||heat.judgesWo3[String(tid)]))||"";
+}
+
+function setJudgeForTeam(heat,wo,tid,slot,val){
+  if(wo===0){if(!heat.judgesWo1)heat.judgesWo1={};heat.judgesWo1[tid]=val;heat.judgesWo1[String(tid)]=val;}
+  else if(wo===1&&slot===0){if(!heat.judgesWo2a)heat.judgesWo2a={};heat.judgesWo2a[tid]=val;heat.judgesWo2a[String(tid)]=val;}
+  else if(wo===1&&slot===1){if(!heat.judgesWo2b)heat.judgesWo2b={};heat.judgesWo2b[tid]=val;heat.judgesWo2b[String(tid)]=val;}
+  else if(wo===2){if(!heat.judgesWo3)heat.judgesWo3={};heat.judgesWo3[tid]=val;heat.judgesWo3[String(tid)]=val;}
+}
+
+function makeJudgeSelectWo(hi,selectedJudge,wo,tid,slot){
+  var sel=document.createElement("select");
+  sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
+  var pool=state.judgePool||[];
+  var blank=document.createElement("option");
+  blank.value="";blank.textContent="– Judge –";
+  if(!selectedJudge)blank.selected=true;
+  sel.appendChild(blank);
+  pool.forEach(function(j){
+    var avail=judgeAvailableForHeat(j,hi);
+    var opt=document.createElement("option");
+    opt.value=j;opt.textContent=j+(avail?"":" ⚠");
+    if(j===selectedJudge)opt.selected=true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener("change",function(){
+    setJudgeForTeam(state.heats.heats[hi],wo,tid,slot,sel.value);
+  });
+  return sel;
+}
+
 function renderAdminHeatsList(){
   var h=state.heats;
-  if(!h||!h.heats||!h.heats.length){
-    // auto-generate heats if missing
-    regenHeatsQuiet();
-    h=state.heats;
-  }
+  if(!h||!h.heats||!h.heats.length){regenHeatsQuiet();h=state.heats;}
   var el=document.getElementById("a-heats-list");if(!el)return;
   el.innerHTML="";
   var times=calcHeatTimes();
   var s=state.settings,woNames=[s.wo1,s.wo2,s.wo3];
+  // judges count per workout: WO1=1, WO2=2, WO3=1
+  var judgesPerWo=[1,2,1];
 
   for(var wo=0;wo<3;wo++){
-    // Workout label
     var woLabel=document.createElement("div");
     woLabel.style.cssText="font-family:Bebas Neue,sans-serif;font-size:1.2rem;letter-spacing:.06em;color:var(--accent);margin:1rem 0 .5rem";
     woLabel.textContent=woNames[wo];
     el.appendChild(woLabel);
 
+    var nJudges=judgesPerWo[wo];
+    // column grid: team + nJudges judge columns
+    var gridCols="1fr "+Array(nJudges).fill("1fr").join(" ");
+
     for(var hi=0;hi<h.heats.length;hi++){
       var heat=h.heats[hi],ht=times[wo][hi];
-
-      // Heat block
       var block=document.createElement("div");
       block.style.cssText="background:var(--gray2);border:1px solid var(--gray3);border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem";
 
-      // Heat header row
       var hdr=document.createElement("div");
       hdr.style.cssText="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem";
       hdr.innerHTML="<span style='font-family:Bebas Neue,sans-serif;font-size:1.1rem;color:var(--accent)'>Heat "+heat.id+"</span>"
         +"<span style='font-family:DM Mono,monospace;font-size:.72rem;color:var(--gray5)'>"+minsToTime(ht.start)+" – "+minsToTime(ht.end)+"</span>";
       block.appendChild(hdr);
 
-      // Column headers
       var colHdr=document.createElement("div");
-      colHdr.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:.62rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid var(--gray3)";
-      colHdr.innerHTML="<div>Team</div><div>Judge WO1/WO3</div><div>Judge WO2 (2.)</div>";
+      colHdr.style.cssText="display:grid;grid-template-columns:"+gridCols+";gap:6px;font-size:.62rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid var(--gray3)";
+      var colHdrHtml="<div>Team</div><div>Judge 1</div>";
+      if(nJudges===2)colHdrHtml+="<div>Judge 2</div>";
+      colHdr.innerHTML=colHdrHtml;
       block.appendChild(colHdr);
 
-      // Team rows
       for(var ti=0;ti<heat.teams.length;ti++){
         var tid=heat.teams[ti];
-        var jid=heat.judges[tid]||heat.judges[String(tid)]||"";
-        var jid2=(heat.judges2&&(heat.judges2[tid]||heat.judges2[String(tid)]))||"";
         var row=document.createElement("div");
-        row.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;align-items:center";
+        row.style.cssText="display:grid;grid-template-columns:"+gridCols+";gap:6px;margin-bottom:4px;align-items:center";
         var teamSel=makeTeamSelect(state.teams,tid,{hi:hi,ti:ti});
-        var judgeSel=makeJudgeSelect(hi,jid,{hi:hi,tid:String(tid)},false);
-        var judgeSel2=makeJudgeSelect(hi,jid2,{hi:hi,tid:String(tid)},true);
         row.appendChild(teamSel);
-        row.appendChild(judgeSel);
-        row.appendChild(judgeSel2);
+        // Judge 1
+        row.appendChild(makeJudgeSelectWo(hi,getJudgeForTeam(heat,wo,tid,0),wo,tid,0));
+        // Judge 2 only for WO2
+        if(nJudges===2){
+          row.appendChild(makeJudgeSelectWo(hi,getJudgeForTeam(heat,wo,tid,1),wo,tid,1));
+        }
         block.appendChild(row);
       }
       el.appendChild(block);
@@ -1014,27 +1050,29 @@ function autoAssignJudges(){
     if(!available.length)available=pool.slice(); // fallback: use all
 
     var used=[];
+    heat.judgesWo1={};heat.judgesWo2a={};heat.judgesWo2b={};heat.judgesWo3={};
+
+    function pickJudge(used,fallback){
+      var choices=available.filter(function(j){return used.indexOf(j)<0;});
+      if(!choices.length)choices=available.filter(function(j){return used.indexOf(j)<1;});
+      if(!choices.length)choices=available;
+      return choices[0];
+    }
+
+    var usedWo1=[],usedWo2=[],usedWo3=[];
     for(var ti=0;ti<heat.teams.length;ti++){
       var tid=heat.teams[ti];
-      // First judge (WO1 & WO3)
-      var choices1=available.filter(function(j){return used.indexOf(j)<0;});
-      if(!choices1.length)choices1=available;
-      var j1=choices1[ti%choices1.length];
-      used.push(j1);
-      heat.judges[tid]=j1;
-      heat.judges[String(tid)]=j1;
-
-      // Second judge (WO2 only)
-      var choices2=available.filter(function(j){return used.indexOf(j)<0;});
-      if(!choices2.length){
-        // allow reuse but not same as j1
-        choices2=available.filter(function(j){return j!==j1;});
-        if(!choices2.length)choices2=available;
-      }
-      var j2=choices2[ti%choices2.length];
-      used.push(j2);
-      heat.judges2[tid]=j2;
-      heat.judges2[String(tid)]=j2;
+      // WO1: 1 judge
+      var j1=pickJudge(usedWo1);usedWo1.push(j1);
+      heat.judgesWo1[tid]=j1;heat.judgesWo1[String(tid)]=j1;
+      // WO2: 2 judges
+      var ja=pickJudge(usedWo2);usedWo2.push(ja);
+      heat.judgesWo2a[tid]=ja;heat.judgesWo2a[String(tid)]=ja;
+      var jb=pickJudge(usedWo2);usedWo2.push(jb);
+      heat.judgesWo2b[tid]=jb;heat.judgesWo2b[String(tid)]=jb;
+      // WO3: 1 judge
+      var j3=pickJudge(usedWo3);usedWo3.push(j3);
+      heat.judgesWo3[tid]=j3;heat.judgesWo3[String(tid)]=j3;
     }
   }
 }
