@@ -336,6 +336,18 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
           <button class="btn-primary" id="btn-save-heats">💾 Heats speichern</button>
         </div>
       </div>
+      <div class="a-card">
+        <div class="a-card-title">Judge Pool</div>
+        <div style="font-size:.75rem;color:var(--gray5);font-family:DM Mono,monospace;margin-bottom:10px">
+          WO1 &amp; WO3: 1 Judge pro Team &nbsp;|&nbsp; WO2: 2 Judges pro Team<br/>
+          Regel: Judge darf nicht im aktuellen, vorherigen oder nächsten Heat selber antreten.
+        </div>
+        <div id="a-judge-pool-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="inp-new-judge" placeholder="Name des Judges" style="flex:1;background:var(--gray2);border:1px solid var(--gray3);border-radius:6px;padding:8px 10px;color:var(--white);font-size:.85rem;font-family:DM Sans,sans-serif;outline:none"/>
+          <button class="btn-primary" id="btn-add-judge">+ Hinzufügen</button>
+        </div>
+      </div>
       <div class="a-card" id="a-heats-editor">
         <div class="a-card-title">Heats &amp; Judge-Zuteilung</div>
         <div id="a-heats-list"></div>
@@ -436,6 +448,7 @@ var COLORS=[
 var state={
   teams:[],scores:{},
   heats:{"teamsPerHeat": 3, "startTime": "09:00", "heatDuration": 12, "pauseBetweenHeats": 5, "breakBetweenWorkouts": 20, "visible": false, "heats": [{"id": 1, "teams": [1000000, 1000001, 1000002], "judges": {"1000000": 1000003, "1000001": 1000005, "1000002": 1000007}}, {"id": 2, "teams": [1000003, 1000004, 1000005], "judges": {"1000003": 1000006, "1000004": 1000008, "1000005": 1000010}}, {"id": 3, "teams": [1000006, 1000007, 1000008], "judges": {"1000006": 1000000, "1000007": 1000002, "1000008": 1000010}}, {"id": 4, "teams": [1000009, 1000010, 1000011], "judges": {"1000009": 1000000, "1000010": 1000002, "1000011": 1000004}}, {"id": 5, "teams": [1000012, 1000013], "judges": {"1000012": 1000000, "1000013": 1000002}}]},
+  judgePool:["Sabrina", "Manuel", "Elke", "Sam", "Albert", "Sabine", "Andi", "Simone", "Ines F.", "Jürgen", "Max", "Sandra", "Mike", "Elias", "Jutta", "Isabella", "Ines P.", "Alex H.", "Meli"],
   settings:{
     wo1:"Workout 1",wo1cap:"12:00",
     wo2:"Workout 2",wo2type:"reps",
@@ -467,6 +480,7 @@ async function loadFromDB(){
       if(sd&&sd.length>0&&sd[0].data){
         var sdata=sd[0].data;
         if(sdata.heats&&sdata.heats.heats){state.heats=sdata.heats;delete sdata.heats;}
+        if(sdata.judgePool){state.judgePool=sdata.judgePool;delete sdata.judgePool;}
         Object.assign(state.settings,sdata);
       }
     }
@@ -767,6 +781,43 @@ function renderPublicHeats(){
 }
 
 /* ══ HEATS ADMIN ══ */
+function renderJudgePool(){
+  var el=document.getElementById("a-judge-pool-list");if(!el)return;
+  var pool=state.judgePool||[];
+  if(!pool.length){el.innerHTML="<span style='color:var(--gray5);font-size:.82rem'>Keine Judges</span>";return;}
+  el.innerHTML="";
+  pool.forEach(function(j){
+    var tag=document.createElement("div");
+    tag.style.cssText="display:flex;align-items:center;gap:5px;background:var(--gray2);border:1px solid var(--gray3);border-radius:20px;padding:4px 10px 4px 12px;font-size:.8rem;color:var(--white)";
+    var name=document.createElement("span");
+    name.textContent=j;
+    var btn=document.createElement("button");
+    btn.textContent="×";
+    btn.style.cssText="background:transparent;border:none;color:var(--gray5);cursor:pointer;font-size:1rem;line-height:1;padding:0;margin-left:2px";
+    btn.onclick=function(){removeJudge(j);};
+    tag.appendChild(name);
+    tag.appendChild(btn);
+    el.appendChild(tag);
+  });
+}
+
+function addJudge(){
+  var inp=document.getElementById("inp-new-judge");
+  var name=(inp.value||"").trim();
+  if(!name)return;
+  if(!state.judgePool)state.judgePool=[];
+  if(state.judgePool.indexOf(name)>=0){alert("Judge bereits im Pool!");return;}
+  state.judgePool.push(name);
+  inp.value="";
+  renderJudgePool();
+}
+
+function removeJudge(name){
+  if(!confirm("Judge "+name+" entfernen?"))return;
+  state.judgePool=(state.judgePool||[]).filter(function(j){return j!==name;});
+  renderJudgePool();
+}
+
 function renderAdminHeats(){
   var h=state.heats||{};
   document.getElementById("heat-starttime").value=h.startTime||"09:00";
@@ -777,6 +828,7 @@ function renderAdminHeats(){
   var vcb=document.getElementById("heats-visible");
   if(vcb)vcb.checked=!!h.visible;
   updateHeatVisBadge();
+  renderJudgePool();
   renderAdminHeatsList();
 }
 
@@ -827,40 +879,35 @@ function makeTeamSelect(teams, selectedId, dataset){
   return sel;
 }
 
-function makeJudgeSelect(excludeTeamId, selectedJudge, dataset){
+function makeJudgeSelect(heatIdx, selectedJudge, dataset, isSecond){
   var sel=document.createElement("select");
   sel.className="heat-edit-select";
   sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
   Object.keys(dataset).forEach(function(k){sel.dataset[k]=dataset[k];});
-  var available=getAllAthletes();
-  // group by team with optgroups
-  var byTeam={};
-  available.forEach(function(a){
-    if(!byTeam[a.teamId])byTeam[a.teamId]=[];
-    byTeam[a.teamId].push(a);
-  });
-  // blank option
+  var pool=state.judgePool||[];
   var blank=document.createElement("option");
   blank.value="";blank.textContent="– Judge wählen –";
   if(!selectedJudge)blank.selected=true;
   sel.appendChild(blank);
-  Object.keys(byTeam).forEach(function(tid){
-    var grp=document.createElement("optgroup");
-    grp.label=getTeamName(parseInt(tid));
-    byTeam[tid].forEach(function(a){
-      var opt=document.createElement("option");
-      opt.value=a.name;
-      opt.textContent=a.name;
-      if(a.name===selectedJudge)opt.selected=true;
-      grp.appendChild(opt);
-    });
-    sel.appendChild(grp);
+  pool.forEach(function(j){
+    var avail=judgeAvailableForHeat(j,heatIdx);
+    var opt=document.createElement("option");
+    opt.value=j;
+    opt.textContent=j+(avail?"":" ⚠");
+    if(j===selectedJudge)opt.selected=true;
+    sel.appendChild(opt);
   });
   sel.addEventListener("change",function(){
     var hi=parseInt(sel.dataset.hi);
     var tid=sel.dataset.tid;
-    state.heats.heats[hi].judges[tid]=sel.value;
-    state.heats.heats[hi].judges[parseInt(tid)]=sel.value;
+    if(!isSecond){
+      state.heats.heats[hi].judges[tid]=sel.value;
+      state.heats.heats[hi].judges[parseInt(tid)]=sel.value;
+    } else {
+      if(!state.heats.heats[hi].judges2)state.heats.heats[hi].judges2={};
+      state.heats.heats[hi].judges2[tid]=sel.value;
+      state.heats.heats[hi].judges2[parseInt(tid)]=sel.value;
+    }
   });
   return sel;
 }
@@ -900,20 +947,23 @@ function renderAdminHeatsList(){
 
       // Column headers
       var colHdr=document.createElement("div");
-      colHdr.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.62rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid var(--gray3)";
-      colHdr.innerHTML="<div>Team</div><div>Judge</div>";
+      colHdr.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:.62rem;color:var(--gray5);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid var(--gray3)";
+      colHdr.innerHTML="<div>Team</div><div>Judge WO1/WO3</div><div>Judge WO2 (2.)</div>";
       block.appendChild(colHdr);
 
       // Team rows
       for(var ti=0;ti<heat.teams.length;ti++){
         var tid=heat.teams[ti];
-        var jid=heat.judges[tid]||heat.judges[String(tid)]||state.teams[0].id;
+        var jid=heat.judges[tid]||heat.judges[String(tid)]||"";
+        var jid2=(heat.judges2&&(heat.judges2[tid]||heat.judges2[String(tid)]))||"";
         var row=document.createElement("div");
-        row.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;align-items:center";
+        row.style.cssText="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;align-items:center";
         var teamSel=makeTeamSelect(state.teams,tid,{hi:hi,ti:ti});
-        var judgeSel=makeJudgeSelect(tid,jid,{hi:hi,tid:String(tid)});
+        var judgeSel=makeJudgeSelect(hi,jid,{hi:hi,tid:String(tid)},false);
+        var judgeSel2=makeJudgeSelect(hi,jid2,{hi:hi,tid:String(tid)},true);
         row.appendChild(teamSel);
         row.appendChild(judgeSel);
+        row.appendChild(judgeSel2);
         block.appendChild(row);
       }
       el.appendChild(block);
@@ -921,32 +971,70 @@ function renderAdminHeatsList(){
   }
 }
 
+// Get team IDs that a judge belongs to (by checking team athlete lists)
+function getJudgeTeamId(judgeName){
+  for(var i=0;i<state.teams.length;i++){
+    var t=state.teams[i];
+    var athletes=(t.ath||"").split(",").map(function(a){return a.trim();});
+    if(athletes.indexOf(judgeName)>=0)return t.id;
+  }
+  return null; // judge not in any team
+}
+
+// Get team IDs competing in a heat
+function getHeatTeamIds(heatIdx){
+  if(heatIdx<0||heatIdx>=state.heats.heats.length)return[];
+  return state.heats.heats[heatIdx].teams;
+}
+
+// Check if a judge is available for a given heat
+// Rules: judge cannot be in current heat, prev heat, OR next heat
+function judgeAvailableForHeat(judgeName, heatIdx){
+  var teamId=getJudgeTeamId(judgeName);
+  if(teamId===null)return true; // judge not in any team, always available
+  var prevIds=getHeatTeamIds(heatIdx-1);
+  var currIds=getHeatTeamIds(heatIdx);
+  var nextIds=getHeatTeamIds(heatIdx+1);
+  var blocked=prevIds.concat(currIds).concat(nextIds);
+  return blocked.indexOf(teamId)<0;
+}
+
 function autoAssignJudges(){
   var heats=state.heats.heats;
+  var pool=state.judgePool||[];
+  if(!pool.length){alert("Keine Judges im Pool!");return;}
+
   for(var hi=0;hi<heats.length;hi++){
     var heat=heats[hi];
-    var prevHeat=hi>0?heats[hi-1].teams:[];
-    var excluded=new Set(heat.teams.concat(prevHeat));
-    // Get athletes from non-excluded teams
-    var available=[];
-    state.teams.forEach(function(t){
-      if(!excluded.has(t.id)){
-        if(t.ath&&t.ath.trim()!==""){
-          t.ath.split(",").forEach(function(a){var n=a.trim();if(n)available.push(n);});
-        } else {
-          available.push(t.name);
-        }
-      }
-    });
-    var used=[];
     heat.judges={};
+    heat.judges2={}; // second judge for WO2
+
+    // Get available judges for this heat
+    var available=pool.filter(function(j){return judgeAvailableForHeat(j,hi);});
+    if(!available.length)available=pool.slice(); // fallback: use all
+
+    var used=[];
     for(var ti=0;ti<heat.teams.length;ti++){
-      var choices=available.filter(function(a){return used.indexOf(a)===-1;});
-      if(!choices.length)choices=available;
-      var judge=choices[ti%choices.length];
-      used.push(judge);
-      heat.judges[heat.teams[ti]]=judge;
-      heat.judges[String(heat.teams[ti])]=judge;
+      var tid=heat.teams[ti];
+      // First judge (WO1 & WO3)
+      var choices1=available.filter(function(j){return used.indexOf(j)<0;});
+      if(!choices1.length)choices1=available;
+      var j1=choices1[ti%choices1.length];
+      used.push(j1);
+      heat.judges[tid]=j1;
+      heat.judges[String(tid)]=j1;
+
+      // Second judge (WO2 only)
+      var choices2=available.filter(function(j){return used.indexOf(j)<0;});
+      if(!choices2.length){
+        // allow reuse but not same as j1
+        choices2=available.filter(function(j){return j!==j1;});
+        if(!choices2.length)choices2=available;
+      }
+      var j2=choices2[ti%choices2.length];
+      used.push(j2);
+      heat.judges2[tid]=j2;
+      heat.judges2[String(tid)]=j2;
     }
   }
 }
@@ -984,7 +1072,10 @@ async function saveHeats(){
   state.heats.breakBetweenWorkouts=parseInt(document.getElementById("heat-wobreak").value)||20;
   var vcb=document.getElementById("heats-visible");
   if(vcb)state.heats.visible=vcb.checked;
-  await saveSettingsDB();
+  // Save judgePool to Supabase via settings
+  var dataToSave=Object.assign({},state.settings,{heats:state.heats,judgePool:state.judgePool});
+  await sbWrite("settings","POST",[{id:1,data:dataToSave}]);
+  setSyncStatus("ok");
   var btn=document.getElementById("btn-save-heats");
   btn.textContent="✓ Gespeichert";setTimeout(function(){btn.innerHTML="💾 Heats speichern";},1800);
   renderPublicHeats();
@@ -1283,6 +1374,8 @@ document.getElementById("btn-save-settings").addEventListener("click",saveSettin
 document.getElementById("btn-save-heats").addEventListener("click",saveHeats);
 document.getElementById("btn-regen-heats").addEventListener("click",regenHeats);
 document.getElementById("heats-visible").addEventListener("change",updateHeatVisBadge);
+document.getElementById("btn-add-judge").addEventListener("click",addJudge);
+document.getElementById("inp-new-judge").addEventListener("keydown",function(e){if(e.key==="Enter")addJudge();});
 document.getElementById("btn-reset-all").addEventListener("click",resetAll);
 document.getElementById("admin-tabs").addEventListener("click",function(e){var btn=e.target.closest(".a-tab");if(btn)switchTab(btn.getAttribute("data-tab"));});
 document.getElementById("rank-filter").addEventListener("click",function(e){
