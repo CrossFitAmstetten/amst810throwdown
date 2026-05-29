@@ -1073,46 +1073,79 @@ function autoAssignJudges(){
     var heat=heats[hi];
     heat.judgesWo1={};heat.judgesWo2a={};heat.judgesWo2b={};heat.judgesWo3={};
 
-    // Judges not available due to competing in prev/curr/next heat
-    var unavail=pool.filter(function(j){return!judgeAvailableForHeat(j,hi);});
-    var available=shuffle(pool.filter(function(j){return unavail.indexOf(j)<0;}));
-    if(!available.length)available=shuffle(pool.slice()); // fallback
+    // Judges competing in current heat - NEVER allowed
+    var inCurrHeat=pool.filter(function(j){
+      var tid=getJudgeTeamId(j);
+      return tid!==null&&heats[hi].teams.indexOf(tid)>=0;
+    });
+    // Judges competing in prev heat - only excluded in normal mode
+    var inPrevHeat=pool.filter(function(j){
+      if(hi===0)return false;
+      var tid=getJudgeTeamId(j);
+      return tid!==null&&heats[hi-1].teams.indexOf(tid)>=0;
+    });
+    // Judges competing in next heat - only excluded in normal mode
+    var inNextHeat=pool.filter(function(j){
+      if(hi>=heats.length-1)return false;
+      var tid=getJudgeTeamId(j);
+      return tid!==null&&heats[hi+1].teams.indexOf(tid)>=0;
+    });
 
-    // usedInThisHeat: tracks ALL judge assignments in this heat across ALL workouts
-    // A judge can only appear ONCE per heat (can't judge two teams simultaneously)
+    // Fully available: not in curr/prev/next heat
+    var fullyAvail=shuffle(pool.filter(function(j){
+      return inCurrHeat.indexOf(j)<0&&inPrevHeat.indexOf(j)<0&&inNextHeat.indexOf(j)<0;
+    }));
+    // Fallback (exception): allow prev/next heat judges but NEVER current heat
+    var fallbackAvail=shuffle(pool.filter(function(j){
+      return inCurrHeat.indexOf(j)<0;
+    }));
+
+    // How many unique judges do we need per heat?
+    // WO1: 1 per team, WO2: 2 per team, WO3: 1 per team
+    // = 4 judges per team * nTeams... but judges are shared across teams
+    // Actually: per heat we need nTeams * 4 assignments total, all unique
+    var nTeams=heat.teams.length;
+    var needed=nTeams*4; // 1(wo1)+2(wo2)+1(wo3) per team
+
+    // usedInHeat: ALL judge assignments in this heat - no duplicates allowed
     var usedInHeat=[];
 
-    function pickNext(alsoExclude){
-      // Find first available judge not yet used in this heat and not in alsoExclude
-      var exclude=usedInHeat.concat(alsoExclude||[]);
-      var choices=available.filter(function(j){return exclude.indexOf(j)<0;});
-      if(!choices.length){
-        // All available judges used - refill from pool minus unavail
-        var refill=shuffle(pool.filter(function(j){return unavail.indexOf(j)<0&&(alsoExclude||[]).indexOf(j)<0;}));
-        if(!refill.length)refill=shuffle(pool.filter(function(j){return(alsoExclude||[]).indexOf(j)<0;}));
-        if(!refill.length)refill=shuffle(pool.slice());
-        choices=refill;
+    function pickJudge(alsoExclude){
+      var exc=usedInHeat.concat(alsoExclude||[]);
+      // Try fully available first
+      var choices=fullyAvail.filter(function(j){return exc.indexOf(j)<0;});
+      if(choices.length>0){
+        var chosen=choices[Math.floor(Math.random()*choices.length)];
+        usedInHeat.push(chosen);
+        return chosen;
       }
-      var chosen=choices[0];
+      // Exception rule: allow judges from prev/next heat (but not current)
+      choices=fallbackAvail.filter(function(j){return exc.indexOf(j)<0;});
+      if(choices.length>0){
+        var chosen=choices[Math.floor(Math.random()*choices.length)];
+        usedInHeat.push(chosen);
+        return chosen;
+      }
+      // Last resort: any judge not in current heat (allow reuse)
+      choices=fallbackAvail.filter(function(j){return(alsoExclude||[]).indexOf(j)<0;});
+      if(!choices.length)choices=fallbackAvail;
+      var chosen=choices[Math.floor(Math.random()*choices.length)];
       usedInHeat.push(chosen);
       return chosen;
     }
 
     for(var ti=0;ti<heat.teams.length;ti++){
       var tid=heat.teams[ti];
-
       // WO1: 1 judge
-      var j1=pickNext([]);
+      var j1=pickJudge([]);
       heat.judgesWo1[tid]=j1;heat.judgesWo1[String(tid)]=j1;
-
-      // WO2: 2 different judges (also different from each other)
-      var ja=pickNext([]);
+      // WO2: 2 judges, different from each other
+      var ja=pickJudge([]);
       heat.judgesWo2a[tid]=ja;heat.judgesWo2a[String(tid)]=ja;
-      var jb=pickNext([ja]); // ensure judge2 != judge1 for same team
+      var jb=pickJudge([ja]);
       heat.judgesWo2b[tid]=jb;heat.judgesWo2b[String(tid)]=jb;
-
       // WO3: 1 judge
-      var j3=pickNext([]);
+      var j3=pickJudge([]);
       heat.judgesWo3[tid]=j3;heat.judgesWo3[String(tid)]=j3;
     }
   }
