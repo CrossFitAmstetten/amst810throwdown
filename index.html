@@ -1069,85 +1069,82 @@ function autoAssignJudges(){
   var pool=state.judgePool||[];
   if(!pool.length){alert("Keine Judges im Pool!");return;}
 
+  // Track global usage count per judge across ALL heats for fairness
+  var usageCount={};
+  pool.forEach(function(j){usageCount[j]=0;});
+
+  // Helper: get team id of a judge (null if not in any team)
+  function judgeTeamId(j){
+    for(var i=0;i<state.teams.length;i++){
+      var t=state.teams[i];
+      var aths=(t.ath||"").split(",").map(function(a){return a.trim();});
+      if(aths.indexOf(j)>=0)return t.id;
+    }
+    return null;
+  }
+
+  // Helper: is judge competing in a specific heat index?
+  function inHeat(j,heatIdx){
+    if(heatIdx<0||heatIdx>=heats.length)return false;
+    var tid=judgeTeamId(j);
+    return tid!==null&&heats[heatIdx].teams.indexOf(tid)>=0;
+  }
+
+  // Pick judge from a candidate list, preferring lowest usage, with shuffle among ties
+  function pickFair(candidates, usedInHeat, alsoExclude){
+    var exc=usedInHeat.concat(alsoExclude||[]);
+    var choices=candidates.filter(function(j){return exc.indexOf(j)<0;});
+    if(!choices.length)return null;
+    // Find minimum usage among choices
+    var minUsage=choices.reduce(function(m,j){return Math.min(m,usageCount[j]||0);},Infinity);
+    // Get all with minimum usage and shuffle them
+    var tied=shuffle(choices.filter(function(j){return(usageCount[j]||0)===minUsage;}));
+    return tied[0]||null;
+  }
+
+  var warnings=[];
+
   for(var hi=0;hi<heats.length;hi++){
     var heat=heats[hi];
     heat.judgesWo1={};heat.judgesWo2a={};heat.judgesWo2b={};heat.judgesWo3={};
 
-    // Judges competing in current heat - NEVER allowed
-    var inCurrHeat=pool.filter(function(j){
-      var tid=getJudgeTeamId(j);
-      return tid!==null&&heats[hi].teams.indexOf(tid)>=0;
+    // Priority 1: not in current, prev or next heat
+    var p1=pool.filter(function(j){
+      return!inHeat(j,hi)&&!inHeat(j,hi-1)&&!inHeat(j,hi+1);
     });
-    // Judges competing in prev heat - only excluded in normal mode
-    var inPrevHeat=pool.filter(function(j){
-      if(hi===0)return false;
-      var tid=getJudgeTeamId(j);
-      return tid!==null&&heats[hi-1].teams.indexOf(tid)>=0;
-    });
-    // Judges competing in next heat - only excluded in normal mode
-    var inNextHeat=pool.filter(function(j){
-      if(hi>=heats.length-1)return false;
-      var tid=getJudgeTeamId(j);
-      return tid!==null&&heats[hi+1].teams.indexOf(tid)>=0;
+    // Priority 2: not in current or next heat, but may be in prev heat
+    var p2=pool.filter(function(j){
+      return!inHeat(j,hi)&&!inHeat(j,hi+1);
     });
 
-    // Fully available: not in curr/prev/next heat
-    var fullyAvail=shuffle(pool.filter(function(j){
-      return inCurrHeat.indexOf(j)<0&&inPrevHeat.indexOf(j)<0&&inNextHeat.indexOf(j)<0;
-    }));
-    // Fallback (exception): allow prev/next heat judges but NEVER current heat
-    var fallbackAvail=shuffle(pool.filter(function(j){
-      return inCurrHeat.indexOf(j)<0;
-    }));
-
-    // How many unique judges do we need per heat?
-    // WO1: 1 per team, WO2: 2 per team, WO3: 1 per team
-    // = 4 judges per team * nTeams... but judges are shared across teams
-    // Actually: per heat we need nTeams * 4 assignments total, all unique
-    var nTeams=heat.teams.length;
-    var needed=nTeams*4; // 1(wo1)+2(wo2)+1(wo3) per team
-
-    // usedInHeat: ALL judge assignments in this heat - no duplicates allowed
+    // usedInHeat: each judge can only appear ONCE per heat across all workouts
     var usedInHeat=[];
 
-    function pickJudge(alsoExclude){
-      var exc=usedInHeat.concat(alsoExclude||[]);
-      // Try fully available first
-      var choices=fullyAvail.filter(function(j){return exc.indexOf(j)<0;});
-      if(choices.length>0){
-        var chosen=choices[Math.floor(Math.random()*choices.length)];
-        usedInHeat.push(chosen);
-        return chosen;
-      }
-      // Exception rule: allow judges from prev/next heat (but not current)
-      choices=fallbackAvail.filter(function(j){return exc.indexOf(j)<0;});
-      if(choices.length>0){
-        var chosen=choices[Math.floor(Math.random()*choices.length)];
-        usedInHeat.push(chosen);
-        return chosen;
-      }
-      // Last resort: any judge not in current heat (allow reuse)
-      choices=fallbackAvail.filter(function(j){return(alsoExclude||[]).indexOf(j)<0;});
-      if(!choices.length)choices=fallbackAvail;
-      var chosen=choices[Math.floor(Math.random()*choices.length)];
-      usedInHeat.push(chosen);
-      return chosen;
+    function assign(alsoExclude){
+      var j=pickFair(p1,usedInHeat,alsoExclude);
+      if(j){usedInHeat.push(j);usageCount[j]=(usageCount[j]||0)+1;return j;}
+      j=pickFair(p2,usedInHeat,alsoExclude);
+      if(j){usedInHeat.push(j);usageCount[j]=(usageCount[j]||0)+1;return j;}
+      // Priority 3: impossible without adding judges
+      warnings.push("Heat "+(hi+1));
+      return null;
     }
 
     for(var ti=0;ti<heat.teams.length;ti++){
       var tid=heat.teams[ti];
-      // WO1: 1 judge
-      var j1=pickJudge([]);
-      heat.judgesWo1[tid]=j1;heat.judgesWo1[String(tid)]=j1;
-      // WO2: 2 judges, different from each other
-      var ja=pickJudge([]);
+      heat.judgesWo1[tid]=assign([])||"?";
+      heat.judgesWo1[String(tid)]=heat.judgesWo1[tid];
+      var ja=assign([])||"?";
       heat.judgesWo2a[tid]=ja;heat.judgesWo2a[String(tid)]=ja;
-      var jb=pickJudge([ja]);
+      var jb=assign([ja])||"?";
       heat.judgesWo2b[tid]=jb;heat.judgesWo2b[String(tid)]=jb;
-      // WO3: 1 judge
-      var j3=pickJudge([]);
-      heat.judgesWo3[tid]=j3;heat.judgesWo3[String(tid)]=j3;
+      heat.judgesWo3[tid]=assign([])||"?";
+      heat.judgesWo3[String(tid)]=heat.judgesWo3[tid];
     }
+  }
+
+  if(warnings.length){
+    alert("⚠️ Nicht genug Judges für: "+[...new Set(warnings)].join(", ")+"\nBitte weitere Judges zum Pool hinzufügen!");
   }
 }
 
