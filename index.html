@@ -1069,33 +1069,50 @@ function autoAssignJudges(){
   var pool=state.judgePool||[];
   if(!pool.length){alert("Keine Judges im Pool!");return;}
 
-  // One fair shuffled queue per workout for balanced distribution across all heats
-  var qWo1=makeFairQueue(shuffle(pool));
-  var qWo2a=makeFairQueue(shuffle(pool));
-  var qWo2b=makeFairQueue(shuffle(pool));
-  var qWo3=makeFairQueue(shuffle(pool));
-
   for(var hi=0;hi<heats.length;hi++){
     var heat=heats[hi];
     heat.judgesWo1={};heat.judgesWo2a={};heat.judgesWo2b={};heat.judgesWo3={};
 
+    // Judges not available due to competing in prev/curr/next heat
+    var unavail=pool.filter(function(j){return!judgeAvailableForHeat(j,hi);});
+    var available=shuffle(pool.filter(function(j){return unavail.indexOf(j)<0;}));
+    if(!available.length)available=shuffle(pool.slice()); // fallback
+
+    // usedInThisHeat: tracks ALL judge assignments in this heat across ALL workouts
+    // A judge can only appear ONCE per heat (can't judge two teams simultaneously)
+    var usedInHeat=[];
+
+    function pickNext(alsoExclude){
+      // Find first available judge not yet used in this heat and not in alsoExclude
+      var exclude=usedInHeat.concat(alsoExclude||[]);
+      var choices=available.filter(function(j){return exclude.indexOf(j)<0;});
+      if(!choices.length){
+        // All available judges used - refill from pool minus unavail
+        var refill=shuffle(pool.filter(function(j){return unavail.indexOf(j)<0&&(alsoExclude||[]).indexOf(j)<0;}));
+        if(!refill.length)refill=shuffle(pool.filter(function(j){return(alsoExclude||[]).indexOf(j)<0;}));
+        if(!refill.length)refill=shuffle(pool.slice());
+        choices=refill;
+      }
+      var chosen=choices[0];
+      usedInHeat.push(chosen);
+      return chosen;
+    }
+
     for(var ti=0;ti<heat.teams.length;ti++){
       var tid=heat.teams[ti];
-      // Judges not available for this heat (competing in prev/curr/next heat)
-      var unavail=pool.filter(function(j){return!judgeAvailableForHeat(j,hi);});
 
       // WO1: 1 judge
-      var j1=qWo1.next(unavail);
+      var j1=pickNext([]);
       heat.judgesWo1[tid]=j1;heat.judgesWo1[String(tid)]=j1;
 
-      // WO2: 2 different judges
-      var ja=qWo2a.next(unavail);
+      // WO2: 2 different judges (also different from each other)
+      var ja=pickNext([]);
       heat.judgesWo2a[tid]=ja;heat.judgesWo2a[String(tid)]=ja;
-      var jb=qWo2b.next(unavail.concat([ja]));
+      var jb=pickNext([ja]); // ensure judge2 != judge1 for same team
       heat.judgesWo2b[tid]=jb;heat.judgesWo2b[String(tid)]=jb;
 
       // WO3: 1 judge
-      var j3=qWo3.next(unavail);
+      var j3=pickNext([]);
       heat.judgesWo3[tid]=j3;heat.judgesWo3[String(tid)]=j3;
     }
   }
