@@ -1069,7 +1069,6 @@ function autoAssignJudges(){
   var pool=state.judgePool||[];
   if(!pool.length){alert("Keine Judges im Pool!");return;}
 
-  // Helper: get team id of a judge
   function judgeTeamId(j){
     for(var i=0;i<state.teams.length;i++){
       var t=state.teams[i];
@@ -1084,15 +1083,16 @@ function autoAssignJudges(){
     return tid!==null&&heats[hi].teams.indexOf(tid)>=0;
   }
 
-  // Global usage counter for fairness across ALL assignments
+  // Global usage counter - fairness is SECONDARY to uniqueness
   var usage={};
   pool.forEach(function(j){usage[j]=0;});
 
-  // Pick fairest judge from candidates not in excluded list
-  // "fairest" = lowest usage count, shuffle among ties for randomness
-  function pickFair(candidates, excluded){
-    var choices=candidates.filter(function(j){return excluded.indexOf(j)<0;});
+  // Pick from candidates: uniqueness first, then fairest (lowest usage)
+  function pickUnique(candidates, usedThisRun, alsoExclude){
+    var exc=usedThisRun.concat(alsoExclude||[]);
+    var choices=candidates.filter(function(j){return exc.indexOf(j)<0;});
     if(!choices.length)return null;
+    // Among available unique choices, pick fairest
     var minU=choices.reduce(function(m,j){return Math.min(m,usage[j]);},Infinity);
     var tied=shuffle(choices.filter(function(j){return usage[j]===minU;}));
     var chosen=tied[0];
@@ -1106,57 +1106,54 @@ function autoAssignJudges(){
     var heat=heats[hi];
     heat.judgesWo1={};heat.judgesWo2a={};heat.judgesWo2b={};heat.judgesWo3={};
 
-    // P1: not in current, prev or next heat
+    // P1: ideal - not in current, prev or next heat
     var p1=pool.filter(function(j){
       return!inHeat(j,hi)&&!inHeat(j,hi-1)&&!inHeat(j,hi+1);
     });
-    // P2: not in current or next heat (prev heat allowed as exception)
+    // P2: exception - not in current or next heat (prev allowed)
     var p2=pool.filter(function(j){
-      return!inHeat(j,hi)&&!inHeat(j,hi+1);
+      return!inHeat(j,hi)&&!inHeat(j,hi+1)&&p1.indexOf(j)<0;
     });
+    // Combined pool in priority order: P1 judges first, then P2
+    var orderedPool=p1.concat(p2);
 
-    // IMPORTANT: uniqueness is per workout per heat (not across workouts)
-    // WO1, WO2, WO3 run at different times, so same judge CAN appear in
-    // WO1 Heat X AND WO2 Heat X (just not twice within same workout+heat)
-
-    function assignForWorkout(nJudges, judgeKeys){
-      // nJudges: how many unique judges needed for this workout in this heat
-      // judgeKeys: array of keys to fill in heat object
+    // Assign one workout at a time - uniqueness resets per workout
+    // (WO1, WO2, WO3 run at different times so same judge CAN appear
+    //  in different workouts of the same heat)
+    function assignWorkout(judgeObjs){
+      // judgeObjs: array of objects to fill, length = judges per team
+      // e.g. for WO1: [heat.judgesWo1]
+      // e.g. for WO2: [heat.judgesWo2a, heat.judgesWo2b]
       var usedThisRun=[];
-
-      function pick(alsoExclude){
-        var exc=usedThisRun.concat(alsoExclude||[]);
-        var j=pickFair(p1,exc);
-        if(j){usedThisRun.push(j);return j;}
-        // P2 exception
-        j=pickFair(p2,exc);
-        if(j){usedThisRun.push(j);return j;}
-        // P3: not possible
-        warnings.push("Heat "+(hi+1));
-        return"?";
-      }
-
       for(var ti=0;ti<heat.teams.length;ti++){
         var tid=heat.teams[ti];
-        for(var k=0;k<judgeKeys.length;k++){
-          var exclude=k>0?[heat[judgeKeys[0]][tid]]:[];
-          var j=pick(exclude);
-          heat[judgeKeys[k]][tid]=j;
-          heat[judgeKeys[k]][String(tid)]=j;
+        for(var slot=0;slot<judgeObjs.length;slot++){
+          // For slot>0, also exclude judges already assigned to this team this workout
+          var alsoExclude=[];
+          for(var s2=0;s2<slot;s2++){
+            alsoExclude.push(judgeObjs[s2][tid]);
+          }
+          // Try to pick unique judge - UNIQUENESS IS PRIORITY 1
+          var j=pickUnique(orderedPool,usedThisRun,alsoExclude);
+          if(!j){
+            // P3: truly impossible
+            warnings.push("Heat "+(hi+1));
+            j="?";
+          }
+          judgeObjs[slot][tid]=j;
+          judgeObjs[slot][String(tid)]=j;
+          if(j!=="?")usedThisRun.push(j);
         }
       }
     }
 
-    // WO1: 1 judge per team
-    assignForWorkout(heat.teams.length,["judgesWo1"]);
-    // WO2: 2 judges per team (fresh uniqueness - different time slot)
-    assignForWorkout(heat.teams.length*2,["judgesWo2a","judgesWo2b"]);
-    // WO3: 1 judge per team (fresh uniqueness - different time slot)
-    assignForWorkout(heat.teams.length,["judgesWo3"]);
+    assignWorkout([heat.judgesWo1]);
+    assignWorkout([heat.judgesWo2a,heat.judgesWo2b]);
+    assignWorkout([heat.judgesWo3]);
   }
 
   if(warnings.length){
-    var unique=[...new Set(warnings)];
+    var unique=warnings.filter(function(v,i,a){return a.indexOf(v)===i;});
     alert("⚠️ Nicht genug Judges für: "+unique.join(", ")+"\nBitte weitere Judges zum Pool hinzufügen!");
   }
 }
