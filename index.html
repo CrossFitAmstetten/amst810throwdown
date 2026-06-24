@@ -1035,21 +1035,29 @@ function autoAssignJudges(){
     return tid!==null&&heats[hi].teams.indexOf(tid)>=0;
   }
 
-  // Global usage counter - fairness is SECONDARY to uniqueness
+  // Global usage counter for fairness (secondary to priority/uniqueness)
   var usage={};
   pool.forEach(function(j){usage[j]=0;});
 
-  // Pick from candidates: uniqueness first, then fairest (lowest usage)
-  function pickUnique(candidates, usedThisRun, alsoExclude){
-    var exc=usedThisRun.concat(alsoExclude||[]);
-    var choices=candidates.filter(function(j){return exc.indexOf(j)<0;});
+  // Pick fairest (lowest usage) from a SINGLE tier, excluding used/excluded
+  function pickFromTier(tier, excluded){
+    var choices=tier.filter(function(j){return excluded.indexOf(j)<0;});
     if(!choices.length)return null;
-    // Among available unique choices, pick fairest
     var minU=choices.reduce(function(m,j){return Math.min(m,usage[j]);},Infinity);
     var tied=shuffle(choices.filter(function(j){return usage[j]===minU;}));
     var chosen=tied[0];
     usage[chosen]++;
     return chosen;
+  }
+
+  // STRICT priority: try tier1 fully first, only fall to tier2 if tier1 has
+  // no candidates left (after exclusions), then tier3 (impossible -> "?")
+  function pickStrict(tier1, tier2, excluded){
+    var j=pickFromTier(tier1, excluded);
+    if(j)return j;
+    j=pickFromTier(tier2, excluded);
+    if(j)return j;
+    return null; // P3: truly impossible
   }
 
   var warnings=[];
@@ -1062,33 +1070,22 @@ function autoAssignJudges(){
     var p1=pool.filter(function(j){
       return!inHeat(j,hi)&&!inHeat(j,hi-1)&&!inHeat(j,hi+1);
     });
-    // P2: exception - not in current or next heat (prev allowed)
+    // P2: exception - not in current or next heat (prev heat allowed)
     var p2=pool.filter(function(j){
       return!inHeat(j,hi)&&!inHeat(j,hi+1)&&p1.indexOf(j)<0;
     });
-    // Combined pool in priority order: P1 judges first, then P2
-    var orderedPool=p1.concat(p2);
 
-    // Assign one workout at a time - uniqueness resets per workout
-    // (WO1, WO2, WO3 run at different times so same judge CAN appear
-    //  in different workouts of the same heat)
     function assignWorkout(judgeObjs){
-      // judgeObjs: array of objects to fill, length = judges per team
-      // e.g. for WO1: [heat.judgesWo1]
-      // e.g. for WO2: [heat.judgesWo2a, heat.judgesWo2b]
       var usedThisRun=[];
       for(var ti=0;ti<heat.teams.length;ti++){
         var tid=heat.teams[ti];
         for(var slot=0;slot<judgeObjs.length;slot++){
-          // For slot>0, also exclude judges already assigned to this team this workout
-          var alsoExclude=[];
+          var alsoExclude=usedThisRun.slice();
           for(var s2=0;s2<slot;s2++){
             alsoExclude.push(judgeObjs[s2][tid]);
           }
-          // Try to pick unique judge - UNIQUENESS IS PRIORITY 1
-          var j=pickUnique(orderedPool,usedThisRun,alsoExclude);
+          var j=pickStrict(p1,p2,alsoExclude);
           if(!j){
-            // P3: truly impossible
             warnings.push("Heat "+(hi+1));
             j="?";
           }
