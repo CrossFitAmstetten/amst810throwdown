@@ -901,23 +901,56 @@ function setJudgeForTeam(heat,wo,tid,slot,val){
   else if(wo===2){if(!heat.judgesWo3)heat.judgesWo3={};heat.judgesWo3[tid]=val;heat.judgesWo3[String(tid)]=val;}
 }
 
+// Get all judges already assigned within the same heat+workout (across all teams/slots)
+// excluding the current dropdown's own value, so we know who to grey out
+function getJudgesUsedInHeatWorkout(hi,wo,excludeTid,excludeSlot){
+  var heat=state.heats.heats[hi];
+  var used=[];
+  for(var ti=0;ti<heat.teams.length;ti++){
+    var tid=heat.teams[ti];
+    if(wo===1){
+      // WO2 has 2 slots
+      for(var s=0;s<2;s++){
+        if(tid===excludeTid&&s===excludeSlot)continue;
+        var j=getJudgeForTeam(heat,wo,tid,s);
+        if(j)used.push(j);
+      }
+    } else {
+      if(tid===excludeTid)continue;
+      var j2=getJudgeForTeam(heat,wo,tid,0);
+      if(j2)used.push(j2);
+    }
+  }
+  return used;
+}
+
 function makeJudgeSelectWo(hi,selectedJudge,wo,tid,slot){
   var sel=document.createElement("select");
   sel.style.cssText="width:100%;background:var(--gray2);border:1px solid var(--gray3);border-radius:5px;padding:6px 8px;color:var(--white);font-size:.8rem;font-family:DM Sans,sans-serif;outline:none";
   var pool=state.judgePool||[];
+  var usedElsewhere=getJudgesUsedInHeatWorkout(hi,wo,tid,slot);
   var blank=document.createElement("option");
   blank.value="";blank.textContent="– Judge –";
   if(!selectedJudge)blank.selected=true;
   sel.appendChild(blank);
   pool.forEach(function(j){
     var avail=judgeAvailableForHeat(j,hi);
+    var takenByOther=usedElsewhere.indexOf(j)>=0;
     var opt=document.createElement("option");
-    opt.value=j;opt.textContent=j+(avail?"":" ⚠");
+    opt.value=j;
+    if(takenByOther){
+      opt.textContent=j+" (bereits vergeben)";
+      opt.disabled=true;
+      opt.style.color="var(--gray4)";
+    } else {
+      opt.textContent=j+(avail?"":" ⚠");
+    }
     if(j===selectedJudge)opt.selected=true;
     sel.appendChild(opt);
   });
   sel.addEventListener("change",function(){
     setJudgeForTeam(state.heats.heats[hi],wo,tid,slot,sel.value);
+    renderAdminHeatsList(); // re-render to update disabled states across all dropdowns
   });
   return sel;
 }
