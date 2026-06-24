@@ -326,10 +326,22 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
           <div class="a-field"><label>Pause WO2 zwischen Heats (min)</label><input id="heat-pause-wo2" type="number" min="1" max="60" placeholder="5" value="5"/></div>
           <div class="a-field"><label>Pause WO3 zwischen Heats (min)</label><input id="heat-pause-wo3" type="number" min="1" max="60" placeholder="5" value="5"/></div>
         </div>
-        <div class="toggle-wrap" style="margin-top:.5rem">
-          <label class="toggle"><input type="checkbox" id="heats-visible"/><span class="toggle-slider"></span></label>
-          <span class="toggle-label">Heats für Teilnehmer sichtbar</span>
-          <span class="vis-badge off" id="heats-vis-badge" style="margin-left:8px">Nicht sichtbar</span>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:.5rem">
+          <div class="toggle-wrap" style="margin-bottom:0">
+            <label class="toggle"><input type="checkbox" id="heats-visible-wo1"/><span class="toggle-slider"></span></label>
+            <span class="toggle-label" id="heats-vis-label-wo1">Workout 1 Heats sichtbar</span>
+            <span class="vis-badge off" id="heats-vis-badge-wo1" style="margin-left:8px">Nicht sichtbar</span>
+          </div>
+          <div class="toggle-wrap" style="margin-bottom:0">
+            <label class="toggle"><input type="checkbox" id="heats-visible-wo2"/><span class="toggle-slider"></span></label>
+            <span class="toggle-label" id="heats-vis-label-wo2">Workout 2 Heats sichtbar</span>
+            <span class="vis-badge off" id="heats-vis-badge-wo2" style="margin-left:8px">Nicht sichtbar</span>
+          </div>
+          <div class="toggle-wrap" style="margin-bottom:0">
+            <label class="toggle"><input type="checkbox" id="heats-visible-wo3"/><span class="toggle-slider"></span></label>
+            <span class="toggle-label" id="heats-vis-label-wo3">Workout 3 Heats sichtbar</span>
+            <span class="vis-badge off" id="heats-vis-badge-wo3" style="margin-left:8px">Nicht sichtbar</span>
+          </div>
         </div>
         <div class="flex-end">
           <button class="btn-ghost" id="btn-regen-heats">🔄 Heats neu einteilen</button>
@@ -739,18 +751,27 @@ function minsToTime(m){
 function renderPublicHeats(){
   var el=document.getElementById("pub-heats-container");if(!el)return;
   var h=state.heats;
-  if(!h.visible){
+  var visFlags=[!!h.visibleWo1,!!h.visibleWo2,!!h.visibleWo3];
+
+  if(!visFlags[0]&&!visFlags[1]&&!visFlags[2]){
     el.innerHTML="<div class='wo-locked' style='padding:3rem'><span class='wo-locked-icon'>🔒</span><span class='wo-locked-text'>Heats noch nicht veröffentlicht</span></div>";
     return;
   }
+
   var times=calcHeatTimes();
   var s=state.settings;
   var woNames=[s.wo1,s.wo2,s.wo3];
   var judgesPerWo=[1,2,1];
   var html="";
   for(var wo=0;wo<3;wo++){
-    var nJ=judgesPerWo[wo];
     html+="<div style='font-family:Bebas Neue,sans-serif;font-size:1.6rem;letter-spacing:.06em;color:var(--accent);margin:1.5rem 0 .75rem'>"+woNames[wo]+"</div>";
+
+    if(!visFlags[wo]){
+      html+="<div class='wo-locked' style='padding:1.5rem'><span class='wo-locked-icon' style='font-size:1.6rem'>🔒</span><span class='wo-locked-text'>Noch nicht veröffentlicht</span></div>";
+      continue;
+    }
+
+    var nJ=judgesPerWo[wo];
     for(var hi=0;hi<h.heats.length;hi++){
       var heat=h.heats[hi];
       var ht=times[wo][hi];
@@ -776,7 +797,7 @@ function renderPublicHeats(){
         html+="<div class='break-card'><span class='break-icon'>☕</span>Pause: "+minsToTime(times[wo][hi].end)+" – "+minsToTime(times[wo][hi+1].start)+" ("+woPause[wo]+" min)</div>";
       }
     }
-    if(wo<2){
+    if(wo<2&&visFlags[wo+1]){
       var lastEnd=times[wo][h.heats.length-1].end;
       var nextStart=times[wo+1][0].start;
       html+="<div class='wo-break-card'><span>⚙️</span>Umbau: "+minsToTime(lastEnd)+" – "+minsToTime(nextStart)+" ("+h.breakBetweenWorkouts+" min)</div>";
@@ -825,22 +846,33 @@ function removeJudge(name){
 
 function renderAdminHeats(){
   var h=state.heats||{};
+  var s=state.settings;
   document.getElementById("heat-starttime").value=h.startTime||"09:00";
   document.getElementById("heat-pause-wo1").value=h.pauseWo1||h.pauseBetweenHeats||5;
   document.getElementById("heat-pause-wo2").value=h.pauseWo2||h.pauseBetweenHeats||5;
   document.getElementById("heat-pause-wo3").value=h.pauseWo3||h.pauseBetweenHeats||5;
   document.getElementById("heat-wobreak").value=h.breakBetweenWorkouts||20;
-  var vcb=document.getElementById("heats-visible");
-  if(vcb)vcb.checked=!!h.visible;
-  updateHeatVisBadge();
+
+  var lbl1=document.getElementById("heats-vis-label-wo1");if(lbl1)lbl1.textContent=(s.wo1||"Workout 1")+" Heats sichtbar";
+  var lbl2=document.getElementById("heats-vis-label-wo2");if(lbl2)lbl2.textContent=(s.wo2||"Workout 2")+" Heats sichtbar";
+  var lbl3=document.getElementById("heats-vis-label-wo3");if(lbl3)lbl3.textContent=(s.wo3||"Workout 3")+" Heats sichtbar";
+
+  var vcb1=document.getElementById("heats-visible-wo1");if(vcb1)vcb1.checked=!!h.visibleWo1;
+  var vcb2=document.getElementById("heats-visible-wo2");if(vcb2)vcb2.checked=!!h.visibleWo2;
+  var vcb3=document.getElementById("heats-visible-wo3");if(vcb3)vcb3.checked=!!h.visibleWo3;
+  updateAllHeatVisBadges();
   renderJudgePool();
   renderAdminHeatsList();
 }
 
-function updateHeatVisBadge(){
-  var cb=document.getElementById("heats-visible"),badge=document.getElementById("heats-vis-badge");if(!cb||!badge)return;
+function updateHeatVisBadge(wo){
+  var cb=document.getElementById("heats-visible-wo"+wo),badge=document.getElementById("heats-vis-badge-wo"+wo);
+  if(!cb||!badge)return;
   if(cb.checked){badge.className="vis-badge on";badge.textContent="Sichtbar";}
   else{badge.className="vis-badge off";badge.textContent="Nicht sichtbar";}
+}
+function updateAllHeatVisBadges(){
+  updateHeatVisBadge(1);updateHeatVisBadge(2);updateHeatVisBadge(3);
 }
 
 // Build flat athlete list from all teams: [{name, teamId, teamName}]
@@ -1171,6 +1203,9 @@ async function saveHeats(){
   state.heats.pauseWo3=parseInt(document.getElementById("heat-pause-wo3").value)||5;
   state.heats.pauseBetweenHeats=state.heats.pauseWo1; // fallback
   state.heats.breakBetweenWorkouts=parseInt(document.getElementById("heat-wobreak").value)||20;
+  var v1=document.getElementById("heats-visible-wo1");if(v1)state.heats.visibleWo1=v1.checked;
+  var v2=document.getElementById("heats-visible-wo2");if(v2)state.heats.visibleWo2=v2.checked;
+  var v3=document.getElementById("heats-visible-wo3");if(v3)state.heats.visibleWo3=v3.checked;
   var vcb=document.getElementById("heats-visible");
   if(vcb)state.heats.visible=vcb.checked;
   // Save judgePool to Supabase via settings
@@ -1474,7 +1509,9 @@ document.getElementById("btn-save-scores").addEventListener("click",saveScores);
 document.getElementById("btn-save-settings").addEventListener("click",saveSettings);
 document.getElementById("btn-save-heats").addEventListener("click",saveHeats);
 document.getElementById("btn-regen-heats").addEventListener("click",regenHeats);
-document.getElementById("heats-visible").addEventListener("change",updateHeatVisBadge);
+document.getElementById("heats-visible-wo1").addEventListener("change",function(){updateHeatVisBadge(1);});
+document.getElementById("heats-visible-wo2").addEventListener("change",function(){updateHeatVisBadge(2);});
+document.getElementById("heats-visible-wo3").addEventListener("change",function(){updateHeatVisBadge(3);});
 document.getElementById("btn-add-judge").addEventListener("click",addJudge);
 document.getElementById("inp-new-judge").addEventListener("keydown",function(e){if(e.key==="Enter")addJudge();});
 document.getElementById("btn-reset-all").addEventListener("click",resetAll);
