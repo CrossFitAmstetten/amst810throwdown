@@ -319,7 +319,10 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
         </div>
         <div class="a-grid2">
           <div class="a-field"><label>Startzeit Heat 1</label><input id="heat-starttime" placeholder="09:00" value="09:00"/></div>
-          <div class="a-field"><label>Umbau zwischen Workouts (min)</label><input id="heat-wobreak" type="number" min="1" max="60" placeholder="20" value="20"/></div>
+          </div>
+        <div class="a-grid2">
+          <div class="a-field"><label>Umbau WO1 → WO2 (min)</label><input id="heat-wobreak-1" type="number" min="1" max="60" placeholder="20" value="20"/></div>
+          <div class="a-field"><label>Umbau WO2 → WO3 (min)</label><input id="heat-wobreak-2" type="number" min="1" max="60" placeholder="20" value="20"/></div>
         </div>
         <div class="a-grid3">
           <div class="a-field"><label>Pause WO1 zwischen Heats (min)</label><input id="heat-pause-wo1" type="number" min="1" max="60" placeholder="5" value="5"/></div>
@@ -393,8 +396,8 @@ body{background:var(--black);color:var(--white);font-family:"DM Sans",sans-serif
         <div class="a-grid2"><div class="a-field"><label>Name</label><input id="s-wo1-name" value="Workout 1"/></div><div class="a-field"><label>Timecap (mm:ss)</label><input id="s-wo1-cap" value="12:00"/></div></div>
       </div>
       <div class="a-card">
-        <div class="a-card-title">Workout 2 — Name &amp; Score-Typ</div>
-        <div class="a-grid2"><div class="a-field"><label>Name</label><input id="s-wo2-name" value="Workout 2"/></div><div class="a-field"><label>Score-Typ</label><select id="s-wo2-type"><option value="reps">Reps (höher = besser)</option><option value="weight">Gewicht in kg (höher = besser)</option><option value="time">Zeit (niedriger = besser)</option></select></div></div>
+        <div class="a-card-title">Workout 2 — Name, Timecap &amp; Score-Typ</div>
+        <div class="a-grid3"><div class="a-field"><label>Name</label><input id="s-wo2-name" value="Workout 2"/></div><div class="a-field"><label>Timecap (mm:ss)</label><input id="s-wo2-cap" value="12:00" placeholder="12:00"/></div><div class="a-field"><label>Score-Typ</label><select id="s-wo2-type"><option value="reps">Reps (höher = besser)</option><option value="weight">Gewicht in kg (höher = besser)</option><option value="time">Zeit (niedriger = besser)</option></select></div></div>
       </div>
       <div class="a-card">
         <div class="a-card-title">Workout 3 — Name &amp; Timecap</div>
@@ -722,10 +725,15 @@ function calcHeatTimes(){
     parseInt(h.pauseWo2||h.pauseBetweenHeats||5),
     parseInt(h.pauseWo3||h.pauseBetweenHeats||5)
   ];
-  var woBreak=parseInt(h.breakBetweenWorkouts||20);
+  // Two separate workout-transition breaks: WO1→WO2 and WO2→WO3
+  var woBreaks=[
+    parseInt(h.breakWo1Wo2!==undefined?h.breakWo1Wo2:h.breakBetweenWorkouts||20),
+    parseInt(h.breakWo2Wo3!==undefined?h.breakWo2Wo3:h.breakBetweenWorkouts||20)
+  ];
   var s=state.settings;
   function capToMins(cap){var p=(cap||"12:00").split(":");return parseInt(p[0]||0)+parseFloat((p[1]||0))/60;}
-  var woDurs=[capToMins(s.wo1cap), capToMins(s.wo2cap||s.wo1cap), capToMins(s.wo3cap)];
+  // Each workout has its own dedicated timecap field (independent of score type)
+  var woDurs=[capToMins(s.wo1cap), capToMins(s.wo2cap), capToMins(s.wo3cap)];
   var times=[];
   var cursor=startMins;
   for(var wo=0;wo<3;wo++){
@@ -736,7 +744,8 @@ function calcHeatTimes(){
       wt.push({start:cursor,end:cursor+dur});
       cursor+=dur+pause;
     }
-    cursor=cursor-pause+woBreak;
+    cursor-=pause; // remove trailing pause after last heat
+    if(wo<2)cursor+=woBreaks[wo]; // add the correct transition break
     times.push(wt);
   }
   return times;
@@ -800,7 +809,8 @@ function renderPublicHeats(){
     if(wo<2&&visFlags[wo+1]){
       var lastEnd=times[wo][h.heats.length-1].end;
       var nextStart=times[wo+1][0].start;
-      html+="<div class='wo-break-card'><span>⚙️</span>Umbau: "+minsToTime(lastEnd)+" – "+minsToTime(nextStart)+" ("+h.breakBetweenWorkouts+" min)</div>";
+      var transitionBreak=wo===0?(h.breakWo1Wo2!==undefined?h.breakWo1Wo2:h.breakBetweenWorkouts||20):(h.breakWo2Wo3!==undefined?h.breakWo2Wo3:h.breakBetweenWorkouts||20);
+      html+="<div class='wo-break-card'><span>⚙️</span>Umbau: "+minsToTime(lastEnd)+" – "+minsToTime(nextStart)+" ("+transitionBreak+" min)</div>";
     }
   }
   el.innerHTML=html;
@@ -851,7 +861,8 @@ function renderAdminHeats(){
   document.getElementById("heat-pause-wo1").value=h.pauseWo1||h.pauseBetweenHeats||5;
   document.getElementById("heat-pause-wo2").value=h.pauseWo2||h.pauseBetweenHeats||5;
   document.getElementById("heat-pause-wo3").value=h.pauseWo3||h.pauseBetweenHeats||5;
-  document.getElementById("heat-wobreak").value=h.breakBetweenWorkouts||20;
+  var bw1=document.getElementById("heat-wobreak-1");if(bw1)bw1.value=(h.breakWo1Wo2!==undefined?h.breakWo1Wo2:h.breakBetweenWorkouts)||20;
+  var bw2=document.getElementById("heat-wobreak-2");if(bw2)bw2.value=(h.breakWo2Wo3!==undefined?h.breakWo2Wo3:h.breakBetweenWorkouts)||20;
 
   var lbl1=document.getElementById("heats-vis-label-wo1");if(lbl1)lbl1.textContent=(s.wo1||"Workout 1")+" Heats sichtbar";
   var lbl2=document.getElementById("heats-vis-label-wo2");if(lbl2)lbl2.textContent=(s.wo2||"Workout 2")+" Heats sichtbar";
@@ -1202,7 +1213,9 @@ async function saveHeats(){
   state.heats.pauseWo2=parseInt(document.getElementById("heat-pause-wo2").value)||5;
   state.heats.pauseWo3=parseInt(document.getElementById("heat-pause-wo3").value)||5;
   state.heats.pauseBetweenHeats=state.heats.pauseWo1; // fallback
-  state.heats.breakBetweenWorkouts=parseInt(document.getElementById("heat-wobreak").value)||20;
+  state.heats.breakWo1Wo2=parseInt(document.getElementById("heat-wobreak-1").value)||20;
+  state.heats.breakWo2Wo3=parseInt(document.getElementById("heat-wobreak-2").value)||20;
+  state.heats.breakBetweenWorkouts=state.heats.breakWo1Wo2; // legacy fallback
   var v1=document.getElementById("heats-visible-wo1");if(v1)state.heats.visibleWo1=v1.checked;
   var v2=document.getElementById("heats-visible-wo2");if(v2)state.heats.visibleWo2=v2.checked;
   var v3=document.getElementById("heats-visible-wo3");if(v3)state.heats.visibleWo3=v3.checked;
@@ -1442,7 +1455,7 @@ function updateVisBadge(n){
 function loadSettingsUI(){
   var s=state.settings;
   document.getElementById("s-wo1-name").value=s.wo1;document.getElementById("s-wo1-cap").value=s.wo1cap;
-  document.getElementById("s-wo2-name").value=s.wo2;document.getElementById("s-wo2-type").value=s.wo2type;
+  document.getElementById("s-wo2-name").value=s.wo2;document.getElementById("s-wo2-cap").value=s.wo2cap||"12:00";document.getElementById("s-wo2-type").value=s.wo2type;
   document.getElementById("s-wo3-name").value=s.wo3;document.getElementById("s-wo3-cap").value=s.wo3cap;
   for(var n=1;n<=3;n++){
     var cb=document.getElementById("wo"+n+"-visible");
@@ -1467,6 +1480,7 @@ async function saveSettings(){
   state.settings.wo1=document.getElementById("s-wo1-name").value||"Workout 1";
   state.settings.wo1cap=document.getElementById("s-wo1-cap").value||"12:00";
   state.settings.wo2=document.getElementById("s-wo2-name").value||"Workout 2";
+  state.settings.wo2cap=document.getElementById("s-wo2-cap").value||"12:00";
   state.settings.wo2type=document.getElementById("s-wo2-type").value;
   state.settings.wo3=document.getElementById("s-wo3-name").value||"Workout 3";
   state.settings.wo3cap=document.getElementById("s-wo3-cap").value||"12:00";
